@@ -1,50 +1,22 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Shooter MVP</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Multiplayer Shooter</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Courier New', monospace; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 20px; left: 20px; font-size: 20px; text-shadow: 0 0 5px black; pointer-events: none; }
+        #hp { color: #ff4444; font-weight: bold; font-size: 24px; margin-bottom: 5px; }
+    </style>
 </head>
 <body>
-  <div id="ui">
-    <div id="health-bar-container">
-      <div id="health-label">HP</div>
-      <div id="health-bar-bg">
-        <div id="health-bar"></div>
-      </div>
+    <div id="ui">
+        <div id="hp">HP: 100</div>
+        <div id="stats">Вбивств: 0 | Смертей: 0</div>
     </div>
-    <div id="ammo-display">
-      <span id="ammo-current">10</span><span id="ammo-sep">/</span><span id="ammo-reserve">30</span>
-      <span id="reload-indicator" class="hidden">⟳ Перезарядка...</span>
-    </div>
-    <div id="score-display">Очки: <span id="score">0</span></div>
-    <div id="wave-display">Хвиля: <span id="wave">1</span></div>
-    <div id="crosshair">+</div>
-  </div>
-
-  <div id="overlay" class="active">
-    <div id="overlay-box">
-      <h1>☠ SHOOTER</h1>
-      <p id="overlay-sub">Виживи скільки зможеш</p>
-      <div id="controls-hint">
-        <b>WASD</b> — рух &nbsp;|&nbsp; <b>Миша</b> — прицілювання<br/>
-        <b>ЛКМ</b> — стріляти &nbsp;|&nbsp; <b>R</b> — перезарядка<br/>
-        <b>Shift</b> — спринт &nbsp;|&nbsp; <b>E</b> — підбирати аптечку
-      </div>
-      <button id="start-btn">Почати гру</button>
-    </div>
-  </div>
-
-  <div id="gameover-overlay" class="hidden">
-    <div id="overlay-box">
-      <h1>GAME OVER</h1>
-      <p id="final-score-text"></p>
-      <button id="restart-btn">Грати знову</button>
-    </div>
-  </div>
-
-  <canvas id="gameCanvas"></canvas>
-  <script src="game.js"></script>
+    <canvas id="gameCanvas"></canvas>
+    <script src="game.js"></script>
 </body>
 </html>
