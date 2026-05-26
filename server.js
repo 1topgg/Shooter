@@ -164,7 +164,10 @@ wss.on('connection', (ws, req) => {
         });
 
         ws.on('message', (message, isBinary) => {
-            if (isBinary) return;
+            if (isBinary) {
+                console.warn(`⚠️ Dropped binary message from ${playerId}`);
+                return;
+            }
             try {
                 const now = Date.now();
                 if (now - ws.rateLimit.windowStart >= 1000) {

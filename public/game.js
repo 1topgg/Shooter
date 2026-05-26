@@ -43,6 +43,7 @@ let inputSequence = 0;
 let lastMoveSentAt = 0;
 let lastShotAt = 0;
 let particleIdCounter = 0;
+let particleReplaceCursor = 0;
 
 let particles = [];
 let running = false;
@@ -339,16 +340,16 @@ function updateParticles(dt) {
     particles[writeIndex++] = p;
   }
   particles.length = writeIndex;
+  if (particleReplaceCursor >= particles.length) {
+    particleReplaceCursor = 0;
+  }
 }
 
 function spawnParticles(x, y, color, count, speed) {
   for (let i = 0; i < count; i++) {
-    if (particles.length >= PARTICLE_MAX) {
-      particles.shift();
-    }
     const angle = Math.random() * Math.PI * 2;
     const velocity = speed * (0.4 + Math.random() * 0.6);
-    particles.push({
+    const particle = {
       id: ++particleIdCounter,
       x,
       y,
@@ -357,7 +358,14 @@ function spawnParticles(x, y, color, count, speed) {
       life: 0.22 + Math.random() * 0.25,
       size: 1.6 + Math.random() * 2,
       color
-    });
+    };
+
+    if (particles.length >= PARTICLE_MAX) {
+      particles[particleReplaceCursor] = particle;
+      particleReplaceCursor = (particleReplaceCursor + 1) % PARTICLE_MAX;
+    } else {
+      particles.push(particle);
+    }
   }
 }
 
