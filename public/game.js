@@ -254,11 +254,11 @@ function startGame() {
   }
   
   console.log('WebSocket connected, starting game');
-  overlay.classList.remove('active');
+  overlay.classList.add('hidden');
   running = true;
   lastFrameTime = performance.now();
   requestAnimationFrame(loop);
-  console.log('Game started, overlay hidden:', !overlay.classList.contains('active'));
+  console.log('Game started, overlay hidden:', overlay.classList.contains('hidden'));
 }
 
 function restartGame() {
