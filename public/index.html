@@ -2,60 +2,57 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="description" content="Shooter MVP — браузерний мультиплеєрний 2D шутер у реальному часі." />
-  <meta property="og:title" content="Shooter MVP" />
-  <meta property="og:description" content="Мультиплеєрний 2D шутер з WebSocket синхронізацією у реальному часі." />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="/" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Shooter MVP" />
-  <meta name="twitter:description" content="Грай онлайн у швидкий 2D шутер разом із друзями." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shooter MVP</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%230f172a'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%2338bdf8'/%3E%3Crect x='30' y='6' width='4' height='20' fill='%23f87171'/%3E%3Crect x='30' y='38' width='4' height='20' fill='%23f87171'/%3E%3Crect x='6' y='30' width='20' height='4' fill='%23f87171'/%3E%3Crect x='38' y='30' width='20' height='4' fill='%23f87171'/%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%230f172a'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%2338bdf8'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="ui">
-    <div id="connection-status" class="connecting" aria-live="polite">Підключення...</div>
-    <button id="fullscreen-btn" type="button" aria-label="Увімкнути повноекранний режим">⛶ Fullscreen</button>
-    <div id="health-bar-container">
-      <div id="health-label">HP</div>
-      <div id="health-bar-bg">
-        <div id="health-bar"></div>
-      </div>
-    </div>
-    <div id="ammo-display">
-      <span id="ammo-current">10</span><span id="ammo-sep">/</span><span id="ammo-reserve">30</span>
-      <span id="reload-indicator" class="hidden">⟳ Перезарядка...</span>
-    </div>
-    <div id="score-display">Очки: <span id="score">0</span></div>
-    <div id="wave-display">K/D: <span id="wave">0/0</span></div>
-    <div id="crosshair">+</div>
-  </div>
-
-  <div id="overlay">
-    <div id="overlay-box">
-      <h1>☠ SHOOTER</h1>
-      <p id="overlay-sub">Виживи скільки зможеш</p>
-      <div id="controls-hint">
-        <b>WASD</b> — рух &nbsp;|&nbsp; <b>Миша</b> — прицілювання<br/>
-        <b>ЛКМ</b> — стріляти &nbsp;|&nbsp; <b>R</b> — перезарядка<br/>
-        <b>Shift</b> — спринт &nbsp;|&nbsp; <b>E</b> — підбирати аптечку
-      </div>
-      <button id="start-btn">Почати гру</button>
-    </div>
-  </div>
-
-  <div id="gameover-overlay" class="hidden">
-    <div id="overlay-box">
-      <h1>GAME OVER</h1>
-      <p id="final-score-text"></p>
-      <button id="restart-btn">Грати знову</button>
-    </div>
-  </div>
-
   <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD (visible during gameplay) -->
+  <div id="hud" style="display:none;">
+    <div id="health-bar-container">
+      <span id="health-label">HP</span>
+      <div id="health-bar-bg"><div id="health-bar"></div></div>
+      <span id="health-text">100</span>
+    </div>
+    <div id="stats">
+      <span id="kills-display">☠ 0</span>
+      <span id="deaths-display">💀 0</span>
+      <span id="score-display">⭐ 0</span>
+    </div>
+    <div id="kill-feed"></div>
+    <div id="minimap"><canvas id="minimap-canvas" width="160" height="160"></canvas></div>
+    <div id="player-count">Гравців: <span id="pcount">0</span></div>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="start-screen">
+    <div class="screen-box">
+      <h1>☠ SHOOTER</h1>
+      <p class="subtitle">Мультиплеєрний 2D шутер</p>
+      <div class="controls-info">
+        <div><kbd>W A S D</kbd> — рух</div>
+        <div><kbd>Миша</kbd> — прицілювання</div>
+        <div><kbd>ЛКМ</kbd> — стріляти</div>
+        <div><kbd>Shift</kbd> — спринт (дeш)</div>
+        <div><kbd>R</kbd> — перезарядка</div>
+      </div>
+      <input type="text" id="name-input" placeholder="Твоє ім'я..." maxlength="16" autocomplete="off" />
+      <button id="play-btn" disabled>Підключення...</button>
+      <p id="status-text" class="status connecting">Підключення до сервера...</p>
+    </div>
+  </div>
+
+  <!-- Death Screen -->
+  <div id="death-screen" style="display:none;">
+    <div class="screen-box">
+      <h1>💀 ЗАГИНУВ</h1>
+      <p id="death-info">Респавн...</p>
+    </div>
+  </div>
+
   <script src="game.js"></script>
 </body>
 </html>

@@ -8,254 +8,316 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Game state
+// ─── Constants ───────────────────────────────────────────────────────────────
+const WORLD_WIDTH = 2000;
+const WORLD_HEIGHT = 2000;
+const PLAYER_RADIUS = 18;
+const BULLET_SPEED = 14;
+const BULLET_LIFETIME = 1800;
+const TICK_RATE = 30;
+const MAX_MESSAGES_PER_SECOND = 60;
+const MAX_MESSAGE_LENGTH = 2048;
+const DAMAGE = 20;
+const MAX_HEALTH = 100;
+const RESPAWN_DELAY = 1500;
+
+// ─── Game State ──────────────────────────────────────────────────────────────
 const players = new Map();
 const bullets = new Map();
+const connections = new Map(); // ws -> { playerId, joined }
 let bulletIdCounter = 0;
+const killFeed = []; // last N kills
+const MAX_KILL_FEED = 5;
 
-const GAME_WIDTH = 1200;
-const GAME_HEIGHT = 800;
-const BULLET_SPEED = 10;
-const BULLET_LIFETIME = 2000; // 2 seconds
-const MAX_MESSAGES_PER_SECOND = 120;
-const MAX_MESSAGE_LENGTH = 10000;
-const createPlayerId = typeof crypto.randomUUID === 'function'
-    ? () => crypto.randomUUID()
-    : () => `player_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+function createId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
-// Broadcast to all connected clients
-function broadcast(message) {
-    wss.clients.forEach(client => {
-        safeSend(client, message);
-    });
+function getRandomSpawn() {
+  const margin = 100;
+  return {
+    x: margin + Math.random() * (WORLD_WIDTH - margin * 2),
+    y: margin + Math.random() * (WORLD_HEIGHT - margin * 2)
+  };
+}
+
+function broadcast(message, excludeWs = null) {
+  const data = JSON.stringify(message);
+  wss.clients.forEach(client => {
+    if (client === excludeWs) return;
+    if (client.readyState !== WebSocket.OPEN) return;
+    try { client.send(data); } catch (e) { /* ignore */ }
+  });
 }
 
 function safeSend(ws, message) {
-    if (ws.readyState !== WebSocket.OPEN) return;
-    try {
-        ws.send(JSON.stringify(message));
-    } catch (error) {
-        console.error('WebSocket send error:', error);
-    }
+  if (ws.readyState !== WebSocket.OPEN) return;
+  try { ws.send(JSON.stringify(message)); } catch (e) { /* ignore */ }
 }
 
-function isValidNumber(value) {
-    return typeof value === 'number' && Number.isFinite(value) && !Number.isNaN(value);
-}
-
-// Generate random spawn position
-function getRandomSpawn() {
-    return {
-        x: Math.random() * (GAME_WIDTH - 100) + 50,
-        y: Math.random() * (GAME_HEIGHT - 100) + 50
-    };
-}
-
-// Check bullet collisions
-function checkBulletCollisions() {
-    bullets.forEach((bullet, bulletId) => {
-        players.forEach((player, playerId) => {
-            if (bullet.playerId === playerId) return; // Can't hit yourself
-            
-            const dx = player.x - bullet.x;
-            const dy = player.y - bullet.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance < 20) { // Hit radius
-                // Player hit!
-                player.health -= 25;
-                bullets.delete(bulletId);
-                
-                if (player.health <= 0) {
-                    // Player died
-                    player.deaths++;
-                    player.health = 100;
-                    const spawn = getRandomSpawn();
-                    player.x = spawn.x;
-                    player.y = spawn.y;
-                    
-                    // Give kill to shooter
-                    const shooter = players.get(bullet.playerId);
-                    if (shooter) {
-                        shooter.kills++;
-                    }
-                    
-                    broadcast({
-                        type: 'playerDied',
-                        playerId: playerId,
-                        killerId: bullet.playerId
-                    });
-                }
-                
-                broadcast({
-                    type: 'bulletHit',
-                    bulletId: bulletId,
-                    playerId: playerId,
-                    health: player.health
-                });
-            }
-        });
-    });
-}
-
-// Game loop
+// ─── Game Loop ───────────────────────────────────────────────────────────────
 setInterval(() => {
-    // Update bullets
-    const now = Date.now();
-    bullets.forEach((bullet, id) => {
-        bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
-        bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
-        
-        // Remove bullets that are out of bounds or too old
-        if (bullet.x < 0 || bullet.x > GAME_WIDTH || 
-            bullet.y < 0 || bullet.y > GAME_HEIGHT ||
-            now - bullet.createdAt > BULLET_LIFETIME) {
-            bullets.delete(id);
+  const now = Date.now();
+
+  // Update bullets
+  for (const [id, bullet] of bullets) {
+    bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
+    bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
+
+    if (bullet.x < 0 || bullet.x > WORLD_WIDTH ||
+        bullet.y < 0 || bullet.y > WORLD_HEIGHT ||
+        now - bullet.createdAt > BULLET_LIFETIME) {
+      bullets.delete(id);
+      continue;
+    }
+
+    // Check collisions
+    for (const [playerId, player] of players) {
+      if (playerId === bullet.ownerId) continue;
+      if (player.dead) continue;
+
+      const dx = player.x - bullet.x;
+      const dy = player.y - bullet.y;
+      if (dx * dx + dy * dy < (PLAYER_RADIUS + 4) * (PLAYER_RADIUS + 4)) {
+        // Hit!
+        player.health -= DAMAGE;
+        bullets.delete(id);
+
+        if (player.health <= 0) {
+          player.dead = true;
+          player.deaths++;
+          player.deathTime = now;
+
+          const killer = players.get(bullet.ownerId);
+          if (killer) {
+            killer.kills++;
+            killer.score += 100;
+          }
+
+          killFeed.push({
+            killer: killer ? killer.name : '???',
+            killerColor: killer ? killer.color : '#fff',
+            victim: player.name,
+            victimColor: player.color,
+            time: now
+          });
+          if (killFeed.length > MAX_KILL_FEED) killFeed.shift();
+
+          broadcast({
+            type: 'kill',
+            killerId: bullet.ownerId,
+            victimId: playerId,
+            killerName: killer ? killer.name : '???',
+            victimName: player.name
+          });
         }
-    });
-    
-    checkBulletCollisions();
-    
-    // Broadcast game state
-    broadcast({
-        type: 'gameState',
-        players: Array.from(players.values()),
-        bullets: Array.from(bullets.values())
-    });
-}, 1000 / 30); // 30 FPS
 
-wss.on('connection', (ws, req) => {
+        broadcast({
+          type: 'hit',
+          bulletId: id,
+          playerId: playerId,
+          x: bullet.x,
+          y: bullet.y,
+          health: Math.max(0, player.health)
+        });
+        break;
+      }
+    }
+  }
+
+  // Respawn dead players
+  for (const [playerId, player] of players) {
+    if (player.dead && now - player.deathTime > RESPAWN_DELAY) {
+      const spawn = getRandomSpawn();
+      player.x = spawn.x;
+      player.y = spawn.y;
+      player.health = MAX_HEALTH;
+      player.dead = false;
+      player.deathTime = 0;
+
+      broadcast({
+        type: 'respawn',
+        playerId: playerId,
+        x: player.x,
+        y: player.y
+      });
+    }
+  }
+
+  // Broadcast game state
+  const playersArr = [];
+  for (const [id, p] of players) {
+    playersArr.push({
+      id: p.id,
+      x: p.x,
+      y: p.y,
+      angle: p.angle,
+      health: p.health,
+      kills: p.kills,
+      deaths: p.deaths,
+      score: p.score,
+      name: p.name,
+      color: p.color,
+      dead: p.dead,
+      lastInput: p.lastInput
+    });
+  }
+
+  const bulletsArr = [];
+  for (const [id, b] of bullets) {
+    bulletsArr.push({ id, x: b.x, y: b.y, angle: b.angle, ownerId: b.ownerId });
+  }
+
+  broadcast({
+    type: 'state',
+    players: playersArr,
+    bullets: bulletsArr
+  });
+}, 1000 / TICK_RATE);
+
+// ─── WebSocket Handling ──────────────────────────────────────────────────────
+wss.on('connection', (ws) => {
+  const connId = createId();
+  const connData = { id: connId, playerId: null, joined: false, rateCount: 0, rateStart: Date.now() };
+  connections.set(ws, connData);
+
+  console.log(`🔌 Connection opened: ${connId}`);
+
+  // Send world info immediately
+  safeSend(ws, {
+    type: 'welcome',
+    worldWidth: WORLD_WIDTH,
+    worldHeight: WORLD_HEIGHT,
+    playerCount: players.size
+  });
+
+  ws.on('message', (raw) => {
     try {
-        const playerId = createPlayerId();
-        const spawn = getRandomSpawn();
-        const remoteAddress = req?.socket?.remoteAddress || 'unknown';
+      const connData = connections.get(ws);
+      if (!connData) return;
 
-        const player = {
+      // Rate limiting
+      const now = Date.now();
+      if (now - connData.rateStart >= 1000) {
+        connData.rateCount = 0;
+        connData.rateStart = now;
+      }
+      if (++connData.rateCount > MAX_MESSAGES_PER_SECOND) return;
+
+      const str = typeof raw === 'string' ? raw : raw.toString();
+      if (str.length > MAX_MESSAGE_LENGTH) return;
+
+      const msg = JSON.parse(str);
+
+      switch (msg.type) {
+        case 'join': {
+          if (connData.joined) return;
+
+          const playerId = createId();
+          const spawn = getRandomSpawn();
+          const name = (typeof msg.name === 'string' && msg.name.trim().length > 0)
+            ? msg.name.trim().slice(0, 16)
+            : `Гравець${Math.floor(Math.random() * 999)}`;
+
+          const player = {
             id: playerId,
             x: spawn.x,
             y: spawn.y,
             angle: 0,
-            color: `hsl(${Math.random() * 360}, 70%, 60%)`,
-            name: `Player${Math.floor(Math.random() * 1000)}`,
-            health: 100,
+            health: MAX_HEALTH,
             kills: 0,
             deaths: 0,
-            lastProcessedInput: 0
-        };
+            score: 0,
+            name: name,
+            color: `hsl(${Math.random() * 360}, 70%, 55%)`,
+            dead: false,
+            deathTime: 0,
+            lastInput: 0
+          };
 
-        ws.rateLimit = { count: 0, windowStart: Date.now() };
-        players.set(playerId, player);
-        console.log(`🔌 Player connected: ${playerId} (${remoteAddress})`);
+          players.set(playerId, player);
+          connData.playerId = playerId;
+          connData.joined = true;
 
-        // Send player their ID
-        safeSend(ws, {
-            type: 'init',
+          safeSend(ws, {
+            type: 'joined',
             playerId: playerId,
-            player: player
-        });
+            player: player,
+            worldWidth: WORLD_WIDTH,
+            worldHeight: WORLD_HEIGHT,
+            killFeed: killFeed
+          });
 
-        // Notify others
-        broadcast({
+          broadcast({
             type: 'playerJoined',
             player: player
-        });
+          }, ws);
 
-        ws.on('message', (message, isBinary) => {
-            if (isBinary) {
-                console.warn(`⚠️ Dropped binary message from ${playerId}`);
-                return;
-            }
-            try {
-                const now = Date.now();
-                if (now - ws.rateLimit.windowStart >= 1000) {
-                    ws.rateLimit.count = 0;
-                    ws.rateLimit.windowStart = now;
-                }
-                ws.rateLimit.count += 1;
-                if (ws.rateLimit.count > MAX_MESSAGES_PER_SECOND) {
-                    console.warn(`⚠️ Rate limit exceeded by player ${playerId}`);
-                    return;
-                }
-
-                const rawMessage = typeof message === 'string' ? message : message.toString();
-                if (rawMessage.length > MAX_MESSAGE_LENGTH) {
-                    console.warn(`⚠️ Dropped oversized message from ${playerId}: ${rawMessage.length} bytes`);
-                    return;
-                }
-                const data = JSON.parse(rawMessage);
-
-                switch(data.type) {
-                    case 'move':
-                        if (players.has(playerId) &&
-                            isValidNumber(data.x) &&
-                            isValidNumber(data.y) &&
-                            isValidNumber(data.angle)) {
-                            const currentPlayer = players.get(playerId);
-                            currentPlayer.x = Math.max(15, Math.min(GAME_WIDTH - 15, data.x));
-                            currentPlayer.y = Math.max(15, Math.min(GAME_HEIGHT - 15, data.y));
-                            currentPlayer.angle = data.angle;
-                            if (Number.isInteger(data.seq) && data.seq >= 0) {
-                                currentPlayer.lastProcessedInput = data.seq;
-                            }
-                        }
-                        break;
-
-                    case 'shoot':
-                        if (players.has(playerId)) {
-                            const currentPlayer = players.get(playerId);
-                            if (isValidNumber(data.angle)) {
-                                currentPlayer.angle = data.angle;
-                            }
-                            const bulletId = `bullet_${bulletIdCounter++}`;
-
-                            bullets.set(bulletId, {
-                                id: bulletId,
-                                x: currentPlayer.x + Math.cos(currentPlayer.angle) * 25,
-                                y: currentPlayer.y + Math.sin(currentPlayer.angle) * 25,
-                                angle: currentPlayer.angle,
-                                playerId: playerId,
-                                createdAt: Date.now()
-                            });
-
-                            broadcast({
-                                type: 'bulletFired',
-                                playerId: playerId
-                            });
-                        }
-                        break;
-                }
-            } catch (e) {
-                console.error(`Error handling message from ${playerId}:`, e);
-            }
-        });
-
-        ws.on('error', (error) => {
-            console.error(`❌ WebSocket error for player ${playerId}:`, error);
-        });
-
-        ws.on('close', () => {
-            players.delete(playerId);
-            console.log(`🔌 Player disconnected: ${playerId}`);
-            broadcast({
-                type: 'playerLeft',
-                playerId: playerId
-            });
-        });
-    } catch (error) {
-        console.error('Fatal WebSocket connection setup error:', error);
-        try {
-            ws.close();
-        } catch (closeError) {
-            console.error('Error closing WebSocket after setup failure:', closeError);
+          console.log(`🎮 Player joined: ${name} (${playerId})`);
+          break;
         }
+
+        case 'move': {
+          if (!connData.joined) return;
+          const player = players.get(connData.playerId);
+          if (!player || player.dead) return;
+
+          if (typeof msg.x === 'number' && typeof msg.y === 'number' &&
+              isFinite(msg.x) && isFinite(msg.y)) {
+            player.x = Math.max(PLAYER_RADIUS, Math.min(WORLD_WIDTH - PLAYER_RADIUS, msg.x));
+            player.y = Math.max(PLAYER_RADIUS, Math.min(WORLD_HEIGHT - PLAYER_RADIUS, msg.y));
+          }
+          if (typeof msg.angle === 'number' && isFinite(msg.angle)) {
+            player.angle = msg.angle;
+          }
+          if (typeof msg.seq === 'number') {
+            player.lastInput = msg.seq;
+          }
+          break;
+        }
+
+        case 'shoot': {
+          if (!connData.joined) return;
+          const player = players.get(connData.playerId);
+          if (!player || player.dead) return;
+
+          if (typeof msg.angle === 'number' && isFinite(msg.angle)) {
+            player.angle = msg.angle;
+          }
+
+          const bulletId = `b${++bulletIdCounter}`;
+          bullets.set(bulletId, {
+            x: player.x + Math.cos(player.angle) * (PLAYER_RADIUS + 8),
+            y: player.y + Math.sin(player.angle) * (PLAYER_RADIUS + 8),
+            angle: player.angle,
+            ownerId: connData.playerId,
+            createdAt: Date.now()
+          });
+          break;
+        }
+      }
+    } catch (e) {
+      // Ignore malformed messages
     }
+  });
+
+  ws.on('close', () => {
+    const connData = connections.get(ws);
+    if (connData && connData.playerId) {
+      players.delete(connData.playerId);
+      broadcast({ type: 'playerLeft', playerId: connData.playerId });
+      console.log(`🔌 Player left: ${connData.playerId}`);
+    }
+    connections.delete(ws);
+  });
+
+  ws.on('error', () => {});
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🎮 2D Shooter server running on port ${PORT}`);
-    console.log(`🌐 Open http://localhost:${PORT} to play`);
+  console.log(`🎮 Shooter server running on port ${PORT}`);
+  console.log(`🌐 Open http://localhost:${PORT}`);
 });
