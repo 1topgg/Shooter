@@ -1,163 +1,50 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Multiplayer Shooter</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background: #1a1a2e;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            color: white;
-            overflow: hidden;
-        }
-        
-        #gameCanvas {
-            border: 3px solid #16213e;
-            background: #0f3460;
-            box-shadow: 0 0 30px rgba(0, 191, 255, 0.3);
-            cursor: crosshair;
-        }
-        
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 20px;
-            border-radius: 10px;
-            border: 2px solid #00bfff;
-        }
-        
-        #health {
-            font-size: 20px;
-            font-weight: bold;
-            color: #00ff00;
-        }
-        
-        #health.low {
-            color: #ff4444;
-            animation: pulse 0.5s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        #score {
-            font-size: 18px;
-            margin-top: 10px;
-            color: #ffcc00;
-        }
-        
-        #leaderboard {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 20px;
-            border-radius: 10px;
-            border: 2px solid #00bfff;
-            min-width: 200px;
-        }
-        
-        #leaderboard h3 {
-            margin-bottom: 10px;
-            color: #00bfff;
-            text-align: center;
-        }
-        
-        .player-score {
-            padding: 5px 0;
-            border-bottom: 1px solid #333;
-        }
-        
-        .player-score:last-child {
-            border-bottom: none;
-        }
-        
-        #controls {
-            position: absolute;
-            bottom: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 20px;
-            border-radius: 10px;
-            border: 2px solid #00bfff;
-            text-align: center;
-        }
-        
-        #controls p {
-            margin: 5px 0;
-            font-size: 14px;
-        }
-        
-        #connectionStatus {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px 50px;
-            border-radius: 15px;
-            border: 3px solid #00bfff;
-            font-size: 24px;
-            display: none;
-        }
-        
-        #connectionStatus.show {
-            display: block;
-        }
-        
-        .dot-loader {
-            display: inline-block;
-        }
-        
-        .dot-loader:after {
-            content: '...';
-            animation: dots 1.5s steps(4, end) infinite;
-        }
-        
-        @keyframes dots {
-            0%, 20% { content: '.'; }
-            40% { content: '..'; }
-            60%, 100% { content: '...'; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shooter MVP</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <canvas id="gameCanvas" width="1200" height="800"></canvas>
-    
-    <div id="ui">
-        <div id="health">Health: 100</div>
-        <div id="score">K: 0 / D: 0</div>
+  <div id="ui">
+    <div id="health-bar-container">
+      <div id="health-label">HP</div>
+      <div id="health-bar-bg">
+        <div id="health-bar"></div>
+      </div>
     </div>
-    
-    <div id="leaderboard">
-        <h3>🏆 LEADERBOARD</h3>
-        <div id="leaderboardContent"></div>
+    <div id="ammo-display">
+      <span id="ammo-current">10</span><span id="ammo-sep">/</span><span id="ammo-reserve">30</span>
+      <span id="reload-indicator" class="hidden">⟳ Перезарядка...</span>
     </div>
-    
-    <div id="controls">
-        <p><strong>Управління:</strong></p>
-        <p>WASD - рух | Миша - приціл | ЛКМ - стріляти</p>
+    <div id="score-display">Очки: <span id="score">0</span></div>
+    <div id="wave-display">Хвиля: <span id="wave">1</span></div>
+    <div id="crosshair">+</div>
+  </div>
+
+  <div id="overlay" class="active">
+    <div id="overlay-box">
+      <h1>☠ SHOOTER</h1>
+      <p id="overlay-sub">Виживи скільки зможеш</p>
+      <div id="controls-hint">
+        <b>WASD</b> — рух &nbsp;|&nbsp; <b>Миша</b> — прицілювання<br/>
+        <b>ЛКМ</b> — стріляти &nbsp;|&nbsp; <b>R</b> — перезарядка<br/>
+        <b>Shift</b> — спринт &nbsp;|&nbsp; <b>E</b> — підбирати аптечку
+      </div>
+      <button id="start-btn">Почати гру</button>
     </div>
-    
-    <div id="connectionStatus">
-        <span class="dot-loader">Підключення до сервера</span>
+  </div>
+
+  <div id="gameover-overlay" class="hidden">
+    <div id="overlay-box">
+      <h1>GAME OVER</h1>
+      <p id="final-score-text"></p>
+      <button id="restart-btn">Грати знову</button>
     </div>
-    
-    <script src="game.js"></script>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+  <script src="game.js"></script>
 </body>
 </html>
