@@ -22,6 +22,9 @@ const BULLET_SPEED = 10;
 const BULLET_LIFETIME = 2000; // 2 seconds
 const MAX_MESSAGES_PER_SECOND = 120;
 const MAX_MESSAGE_LENGTH = 10000;
+const createPlayerId = typeof crypto.randomUUID === 'function'
+    ? () => crypto.randomUUID()
+    : () => `player_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
 // Broadcast to all connected clients
 function broadcast(message) {
@@ -126,7 +129,7 @@ setInterval(() => {
 
 wss.on('connection', (ws, req) => {
     try {
-        const playerId = crypto.randomUUID();
+        const playerId = createPlayerId();
         const spawn = getRandomSpawn();
         const remoteAddress = req?.socket?.remoteAddress || 'unknown';
 
@@ -175,7 +178,10 @@ wss.on('connection', (ws, req) => {
                 }
 
                 const rawMessage = typeof message === 'string' ? message : message.toString();
-                if (rawMessage.length > MAX_MESSAGE_LENGTH) return;
+                if (rawMessage.length > MAX_MESSAGE_LENGTH) {
+                    console.warn(`⚠️ Dropped oversized message from ${playerId}: ${rawMessage.length} bytes`);
+                    return;
+                }
                 const data = JSON.parse(rawMessage);
 
                 switch(data.type) {

@@ -18,6 +18,8 @@ const SEND_INTERVAL_MS = 50;
 const SHOOT_COOLDOWN_MS = 120;
 const PARTICLE_MAX = 600;
 const GRID_SIZE = 96;
+const RECONNECT_BASE_DELAY_MS = 500;
+const RECONNECT_MAX_DELAY_MS = 10000;
 
 const keys = {};
 const mouse = { x: 0, y: 0, down: false };
@@ -96,7 +98,10 @@ function connectWebSocket() {
     if (!shouldReconnect) return;
 
     reconnectAttempts = Math.min(MAX_RECONNECT_ATTEMPTS, reconnectAttempts + 1);
-    const delay = Math.min(10000, 500 * (2 ** (reconnectAttempts - 1)));
+    const delay = Math.min(
+      RECONNECT_MAX_DELAY_MS,
+      RECONNECT_BASE_DELAY_MS * (2 ** (reconnectAttempts - 1))
+    );
     updateConnectionStatus('connecting', `Перепідключення через ${Math.ceil(delay / 1000)}с...`);
     reconnectTimer = setTimeout(connectWebSocket, delay);
   });
@@ -338,7 +343,9 @@ function updateParticles(dt) {
 
 function spawnParticles(x, y, color, count, speed) {
   for (let i = 0; i < count; i++) {
-    if (particles.length >= PARTICLE_MAX) break;
+    if (particles.length >= PARTICLE_MAX) {
+      particles.shift();
+    }
     const angle = Math.random() * Math.PI * 2;
     const velocity = speed * (0.4 + Math.random() * 0.6);
     particles.push({
