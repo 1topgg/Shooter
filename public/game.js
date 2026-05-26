@@ -5,7 +5,9 @@ const healthBar = document.getElementById('health-bar');
 const scoreEl = document.getElementById('score');
 const waveEl = document.getElementById('wave');
 const overlay = document.getElementById('overlay');
+const gameoverOverlay = document.getElementById('gameover-overlay');
 const startBtn = document.getElementById('start-btn');
+const restartBtn = document.getElementById('restart-btn');
 const connectionStatus = document.getElementById('connection-status');
 const fullscreenBtn = document.getElementById('fullscreen-btn');
 
@@ -223,10 +225,17 @@ function sendMessage(payload) {
 }
 
 function startGame() {
+  console.log('startGame() called - hiding overlay and starting game loop');
   overlay.classList.remove('active');
   running = true;
   lastFrameTime = performance.now();
   requestAnimationFrame(loop);
+  console.log('Game started, overlay hidden:', !overlay.classList.contains('active'));
+}
+
+function restartGame() {
+  console.log('restartGame() called - reloading page');
+  window.location.reload();
 }
 
 function getMovementVector(dt) {
@@ -543,7 +552,14 @@ canvas.addEventListener('mouseleave', () => {
 });
 canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
-if (startBtn) startBtn.addEventListener('click', startGame);
+if (startBtn) {
+  console.log('Setting up start button listener');
+  startBtn.addEventListener('click', startGame);
+}
+if (restartBtn) {
+  console.log('Setting up restart button listener');
+  restartBtn.addEventListener('click', restartGame);
+}
 if (fullscreenBtn) {
   fullscreenBtn.addEventListener('click', async () => {
     try {
@@ -564,6 +580,16 @@ window.addEventListener('beforeunload', () => {
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
 });
 
+console.log('Game initialization starting...');
+console.log('Elements check:', {
+  canvas: !!canvas,
+  startBtn: !!startBtn,
+  restartBtn: !!restartBtn,
+  overlay: !!overlay,
+  gameoverOverlay: !!gameoverOverlay
+});
+
 resize();
 updateConnectionStatus('connecting');
 connectWebSocket();
+console.log('Game initialization complete');
