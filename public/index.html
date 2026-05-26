@@ -1,22 +1,58 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online Multiplayer Shooter</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Courier New', monospace; }
-        canvas { display: block; }
-        #ui { position: absolute; top: 20px; left: 20px; font-size: 20px; text-shadow: 0 0 5px black; pointer-events: none; }
-        #hp { color: #ff4444; font-weight: bold; font-size: 24px; margin-bottom: 5px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shooter MVP</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%230f172a'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%2338bdf8'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div id="ui">
-        <div id="hp">HP: 100</div>
-        <div id="stats">Вбивств: 0 | Смертей: 0</div>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD (visible during gameplay) -->
+  <div id="hud" style="display:none;">
+    <div id="health-bar-container">
+      <span id="health-label">HP</span>
+      <div id="health-bar-bg"><div id="health-bar"></div></div>
+      <span id="health-text">100</span>
     </div>
-    <canvas id="gameCanvas"></canvas>
-    <script src="game.js"></script>
+    <div id="stats">
+      <span id="kills-display">☠ 0</span>
+      <span id="deaths-display">💀 0</span>
+      <span id="score-display">⭐ 0</span>
+    </div>
+    <div id="kill-feed"></div>
+    <div id="minimap"><canvas id="minimap-canvas" width="160" height="160"></canvas></div>
+    <div id="player-count">Гравців: <span id="pcount">0</span></div>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="start-screen">
+    <div class="screen-box">
+      <h1>☠ SHOOTER</h1>
+      <p class="subtitle">Мультиплеєрний 2D шутер</p>
+      <div class="controls-info">
+        <div><kbd>W A S D</kbd> — рух</div>
+        <div><kbd>Миша</kbd> — прицілювання</div>
+        <div><kbd>ЛКМ</kbd> — стріляти</div>
+        <div><kbd>Shift</kbd> — спринт (деш)</div>
+        <div><kbd>R</kbd> — перезарядка</div>
+      </div>
+      <input type="text" id="name-input" placeholder="Твоє ім'я..." maxlength="16" autocomplete="off" />
+      <button id="play-btn" disabled>Підключення...</button>
+      <p id="status-text" class="status connecting">Підключення до сервера...</p>
+    </div>
+  </div>
+
+  <!-- Death Screen -->
+  <div id="death-screen" style="display:none;">
+    <div class="screen-box">
+      <h1>💀 ЗАГИНУВ</h1>
+      <p id="death-info">Респавн...</p>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
 </body>
 </html>
