@@ -28,6 +28,7 @@ let reconnectAttempts = 0;
 let reconnectTimer = null;
 let shouldReconnect = true;
 let isConnected = false;
+const MAX_RECONNECT_ATTEMPTS = 20;
 
 let localPlayerId = null;
 let players = new Map();
@@ -94,7 +95,7 @@ function connectWebSocket() {
     updateConnectionStatus('disconnected', 'Зʼєднання втрачено');
     if (!shouldReconnect) return;
 
-    reconnectAttempts += 1;
+    reconnectAttempts = Math.min(MAX_RECONNECT_ATTEMPTS, reconnectAttempts + 1);
     const delay = Math.min(10000, 500 * (2 ** (reconnectAttempts - 1)));
     updateConnectionStatus('connecting', `Перепідключення через ${Math.ceil(delay / 1000)}с...`);
     reconnectTimer = setTimeout(connectWebSocket, delay);

@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,6 +21,7 @@ const GAME_HEIGHT = 800;
 const BULLET_SPEED = 10;
 const BULLET_LIFETIME = 2000; // 2 seconds
 const MAX_MESSAGES_PER_SECOND = 120;
+const MAX_MESSAGE_LENGTH = 10000;
 
 // Broadcast to all connected clients
 function broadcast(message) {
@@ -124,7 +126,7 @@ setInterval(() => {
 
 wss.on('connection', (ws, req) => {
     try {
-        const playerId = Math.random().toString(36).substring(2, 11);
+        const playerId = crypto.randomUUID();
         const spawn = getRandomSpawn();
         const remoteAddress = req?.socket?.remoteAddress || 'unknown';
 
@@ -173,7 +175,7 @@ wss.on('connection', (ws, req) => {
                 }
 
                 const rawMessage = typeof message === 'string' ? message : message.toString();
-                if (rawMessage.length > 10000) return;
+                if (rawMessage.length > MAX_MESSAGE_LENGTH) return;
                 const data = JSON.parse(rawMessage);
 
                 switch(data.type) {
