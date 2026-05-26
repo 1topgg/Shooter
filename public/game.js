@@ -67,6 +67,25 @@ function updateConnectionStatus(state, detail = '') {
   if (state === 'connected') connectionStatus.textContent = 'Підключено';
   if (state === 'connecting') connectionStatus.textContent = detail || 'Підключення...';
   if (state === 'disconnected') connectionStatus.textContent = detail || 'Відключено';
+  
+  // Update start button state
+  updateStartButtonState(state === 'connected');
+}
+
+function updateStartButtonState(isConnected) {
+  if (!startBtn) return;
+  
+  if (isConnected) {
+    startBtn.disabled = false;
+    startBtn.textContent = 'Почати гру';
+    startBtn.style.opacity = '1';
+    startBtn.style.cursor = 'pointer';
+  } else {
+    startBtn.disabled = true;
+    startBtn.textContent = 'Підключення до сервера...';
+    startBtn.style.opacity = '0.5';
+    startBtn.style.cursor = 'not-allowed';
+  }
 }
 
 function makeWsUrl() {
@@ -225,7 +244,16 @@ function sendMessage(payload) {
 }
 
 function startGame() {
-  console.log('startGame() called - hiding overlay and starting game loop');
+  console.log('startGame() called - checking connection status');
+  
+  // Check if WebSocket is connected
+  if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn('Cannot start game: WebSocket not connected');
+    alert('Будь ласка, зачекайте підключення до сервера.\n\nПеревірте:\n1. Сервер запущено на Railway\n2. Статус підключення у правому верхньому куті\n3. Оновіть сторінку (Ctrl+Shift+R)');
+    return;
+  }
+  
+  console.log('WebSocket connected, starting game');
   overlay.classList.remove('active');
   running = true;
   lastFrameTime = performance.now();
@@ -588,6 +616,9 @@ console.log('Elements check:', {
   overlay: !!overlay,
   gameoverOverlay: !!gameoverOverlay
 });
+
+// Initialize button state as disabled
+updateStartButtonState(false);
 
 resize();
 updateConnectionStatus('connecting');
