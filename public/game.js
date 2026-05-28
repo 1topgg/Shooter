@@ -17,597 +17,676 @@ const killFeedEl = document.getElementById('kill-feed');
 const minimapCanvas = document.getElementById('minimap-canvas');
 const minimapCtx = minimapCanvas.getContext('2d');
 const pcountEl = document.getElementById('pcount');
+const xpBarFill = document.getElementById('xp-bar-fill');
+const xpText = document.getElementById('xp-text');
+const levelBadge = document.getElementById('level-badge');
+const waveDisplay = document.getElementById('wave-display');
+const coinsDisplay = document.getElementById('coins-display');
+const weaponDisplay = document.getElementById('weapon-display');
+const powerupsDisplay = document.getElementById('powerups-display');
+const waveAnnouncement = document.getElementById('wave-announcement');
+const levelupPopup = document.getElementById('levelup-popup');
+const skillsBtn = document.getElementById('skills-btn');
+const skillsPanel = document.getElementById('skills-panel');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const PLAYER_RADIUS = 18;
-const BULLET_RADIUS = 5;
+const BULLET_RADIUS = 4;
 const PLAYER_SPEED = 280;
 const SPRINT_SPEED = 420;
 const SHOOT_COOLDOWN = 150;
 const SEND_RATE = 50;
 const DASH_COOLDOWN = 2000;
-const DASH_DISTANCE = 120;
+const DASH_DISTANCE = 130;
+
+const ENEMY_COLORS = {
+  zombie:  { body: '#4ade80', outline: '#16a34a' },
+  runner:  { body: '#f97316', outline: '#c2410c' },
+  tank:    { body: '#64748b', outline: '#475569' },
+  shooter: { body: '#a78bfa', outline: '#7c3aed' },
+  boss:    { body: '#ef4444', outline: '#991b1b' },
+};
+const ENEMY_RADIUS_CLIENT = { zombie: 20, runner: 16, tank: 27, shooter: 18, boss: 42 };
+const DROP_COLORS = { hp: '#22c55e', ammo: '#38bdf8', coins: '#fbbf24', powerup: '#c084fc' };
+const DROP_ICONS  = { hp: '+', ammo: 'A', coins: '$', powerup: '*' };
+
+const POWERUP_LABELS = {
+  doubleDamage:  'x2 Damage',
+  rapidFire:     'Rapid Fire',
+  invincibility: 'God Mode',
+  speedBoost:    'Speed+',
+  infiniteAmmo:  'Inf Ammo',
+  multiShot:     'Multi-shot',
+};
+const WEAPON_NAMES     = { pistol: 'Pistol', shotgun: 'Shotgun', smg: 'SMG', sniper: 'Sniper' };
+const WEAPON_COLORS    = { pistol: '#94a3b8', shotgun: '#f97316', smg: '#22d3ee', sniper: '#a78bfa' };
+const WEAPON_AMMO_INF  = { pistol: true, shotgun: false, smg: false, sniper: false };
+const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
+
+// ─── Save System ─────────────────────────────────────────────────────────────
+const SAVE_KEY = 'shooter_save_v2';
+function loadSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (_) { return {}; } }
+function writeSave(data) { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...loadSave(), ...data })); } catch (_) {} }
+const save = loadSave();
+
+// ─── Skill Tree ───────────────────────────────────────────────────────────────
+const SKILL_DEFS = {
+  damage:    { name: 'Damage +10%',     max: 5, branch: 'attack'   },
+  reload:    { name: 'Reload -15%',     max: 5, branch: 'attack'   },
+  maxHp:     { name: 'MaxHP +20',       max: 5, branch: 'defense'  },
+  regen:     { name: 'Regen HP/s',      max: 3, branch: 'defense'  },
+  armor:     { name: 'Armor -10%dmg',   max: 3, branch: 'defense'  },
+  speed:     { name: 'Speed +10%',      max: 5, branch: 'mobility' },
+  dash:      { name: 'Dash CD /2',      max: 1, branch: 'mobility' },
+  dropRate:  { name: 'Drop +15%',       max: 3, branch: 'utility'  },
+  autoPickup:{ name: 'Auto-Pickup',     max: 1, branch: 'utility'  },
+  luckShot:  { name: 'Crit +10%',       max: 1, branch: 'utility'  },
+};
+const skills = Object.assign(
+  Object.fromEntries(Object.keys(SKILL_DEFS).map(k => [k, 0])),
+  save.skills || {}
+);
+let skillPoints = save.skillPoints || 0;
+
+function getSkillBonus(key) { const d = SKILL_DEFS[key]; return d ? Math.min(skills[key] || 0, d.max) : 0; }
+function playerSpeedMult() { return 1 + getSkillBonus('speed') * 0.10; }
+function playerMaxHp()     { return 100 + getSkillBonus('maxHp') * 20; }
+function getDashCooldown() { return getSkillBonus('dash') > 0 ? 1000 : DASH_COOLDOWN; }
+function getShootCooldown(wpn) {
+  const reduction = getSkillBonus('reload') * 0.15;
+  const base = WEAPON_COOLDOWNS[wpn || currentWeapon] || SHOOT_COOLDOWN;
+  return Math.max(50, base * (1 - reduction));
+}
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let ws = null;
-let connected = false;
-let joined = false;
-let localId = null;
-let worldW = 2000, worldH = 2000;
-
-const keys = {};
-const mouse = { x: 0, y: 0, down: false };
-const camera = { x: 0, y: 0 };
-
-let players = new Map();
-let bullets = [];
-let particles = [];
-let killFeed = [];
-
-let localPlayer = null;
-let pendingInputs = [];
-let inputSeq = 0;
-let lastSendTime = 0;
-let lastShotTime = 0;
-let lastDashTime = 0;
-let running = false;
-let lastFrame = 0;
-let isDead = false;
+let ws = null, connected = false, joined = false, localId = null;
+let worldW = 2400, worldH = 2400;
+const keys = {}, mouse = { x: 0, y: 0, down: false }, camera = { x: 0, y: 0 };
+let players = new Map(), bullets = [], enemyBullets = [], enemies = [], drops = [];
+let particles = [], killFeed = [], damageNumbers = [];
+let localPlayer = null, pendingInputs = [], inputSeq = 0;
+let lastSendTime = 0, lastShotTime = 0, lastDashTime = 0;
+let running = false, lastFrame = 0, isDead = false;
+let currentWeapon = 'pistol';
+let playerWeapons = {
+  pistol:  { ammo: Infinity, maxAmmo: Infinity },
+  shotgun: { ammo: 0, maxAmmo: 48 },
+  smg:     { ammo: 0, maxAmmo: 120 },
+  sniper:  { ammo: 0, maxAmmo: 15 },
+};
+let activePowerUps = [], waveNumber = 0, waveStateStr = 'prep', waveCountdown = 5, waveEnemiesLeft = 0;
+let xp = save.xp || 0, level = Math.floor(Math.sqrt(xp / 100)), coins = save.coins || 0;
+let pendingSkillPoints = skillPoints, regenTimer = 0, screenShake = 0;
 
 // ─── Canvas Setup ────────────────────────────────────────────────────────────
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 resize();
 window.addEventListener('resize', resize);
 
 // ─── WebSocket ───────────────────────────────────────────────────────────────
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}`);
-
+  ws = new WebSocket(proto + '//' + location.host);
   ws.onopen = () => {
     connected = true;
-    updateStatus('connected', 'Підключено! Введи ім\'я та грай.');
-    playBtn.disabled = false;
-    playBtn.textContent = '▶ ГРАТИ';
+    updateStatus('connected', 'Connected! Enter name and play.');
+    playBtn.disabled = false; playBtn.textContent = 'PLAY';
   };
-
-  ws.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      handleMessage(msg);
-    } catch (err) { /* ignore */ }
-  };
-
+  ws.onmessage = (e) => { try { handleMessage(JSON.parse(e.data)); } catch (_) {} };
   ws.onclose = () => {
     connected = false;
     if (joined) {
-      // Lost connection during game
-      joined = false;
-      running = false;
-      hud.style.display = 'none';
-      startScreen.style.display = 'flex';
-      deathScreen.style.display = 'none';
-      updateStatus('error', 'Зʼєднання втрачено. Оновіть сторінку.');
-      playBtn.disabled = true;
-      playBtn.textContent = 'Відключено';
-    } else {
-      updateStatus('error', 'Не вдалося підключитися. Оновіть сторінку.');
-      playBtn.disabled = true;
-    }
-
-    // Reconnect after 2s
-    setTimeout(() => {
-      if (!connected) connectWS();
-    }, 2000);
+      joined = false; running = false;
+      hud.style.display = 'none'; startScreen.style.display = 'flex'; deathScreen.style.display = 'none';
+      updateStatus('error', 'Connection lost. Refresh.');
+      playBtn.disabled = true; playBtn.textContent = 'Disconnected';
+    } else { updateStatus('error', 'Could not connect. Refresh.'); playBtn.disabled = true; }
+    setTimeout(() => { if (!connected) connectWS(); }, 2000);
   };
-
   ws.onerror = () => {};
 }
-
-function updateStatus(cls, text) {
-  statusText.className = 'status ' + cls;
-  statusText.textContent = text;
-}
-
-function send(msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(msg));
-  }
-}
+function updateStatus(cls, text) { statusText.className = 'status ' + cls; statusText.textContent = text; }
+function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 
 // ─── Message Handling ────────────────────────────────────────────────────────
 function handleMessage(msg) {
   switch (msg.type) {
-    case 'welcome':
-      worldW = msg.worldWidth;
-      worldH = msg.worldHeight;
-      break;
+    case 'welcome': worldW = msg.worldWidth; worldH = msg.worldHeight; break;
 
     case 'joined':
-      localId = msg.playerId;
-      worldW = msg.worldWidth;
-      worldH = msg.worldHeight;
-      localPlayer = {
-        x: msg.player.x,
-        y: msg.player.y,
-        angle: 0,
-        health: msg.player.health,
-        kills: 0,
-        deaths: 0,
-        score: 0
-      };
-      if (msg.killFeed) {
-        killFeed = msg.killFeed.map(k => ({ ...k, fadeTime: Date.now() + 8000 }));
-      }
-      joined = true;
-      isDead = false;
-      running = true;
-      lastFrame = performance.now();
-
-      // Show game, hide start screen
-      startScreen.style.display = 'none';
-      deathScreen.style.display = 'none';
-      hud.style.display = 'block';
-
+      localId = msg.playerId; worldW = msg.worldWidth; worldH = msg.worldHeight;
+      localPlayer = { x: msg.player.x, y: msg.player.y, angle: 0, health: msg.player.health, kills: 0, deaths: 0, score: 0 };
+      if (msg.killFeed) killFeed = msg.killFeed.map(k => ({ ...k, fadeTime: Date.now() + 8000 }));
+      waveNumber = msg.wave || 0; waveStateStr = msg.waveState || 'prep'; waveCountdown = msg.waveCountdown || 5;
+      joined = true; isDead = false; running = true; lastFrame = performance.now();
+      startScreen.style.display = 'none'; deathScreen.style.display = 'none'; hud.style.display = 'block';
       requestAnimationFrame(loop);
       break;
 
-    case 'state':
-      applyState(msg.players, msg.bullets);
-      break;
+    case 'state': applyState(msg); break;
 
-    case 'hit':
-      spawnParticles(msg.x, msg.y, '#ff6b6b', 10, 200);
-      break;
+    case 'hit': spawnParticles(msg.x, msg.y, '#ff6b6b', 8, 180); screenShake = Math.max(screenShake, 5); break;
 
     case 'kill':
       addKillFeed(msg.killerName, msg.victimName);
-      if (msg.victimId === localId) {
-        onDeath(msg.killerName);
-      }
-      break;
+      if (msg.victimId === localId) onDeath(msg.killerName); break;
 
     case 'respawn':
       if (msg.playerId === localId && localPlayer) {
-        localPlayer.x = msg.x;
-        localPlayer.y = msg.y;
-        localPlayer.health = 100;
-        isDead = false;
-        deathScreen.style.display = 'none';
+        localPlayer.x = msg.x; localPlayer.y = msg.y; localPlayer.health = 100;
+        isDead = false; deathScreen.style.display = 'none';
       }
-      spawnParticles(msg.x, msg.y, '#4ade80', 16, 200);
+      spawnParticles(msg.x, msg.y, '#4ade80', 16, 200); break;
+
+    case 'playerLeft': players.delete(msg.playerId); break;
+
+    case 'enemyHit':
+      spawnParticles(msg.x, msg.y, '#fb923c', 6, 150);
+      spawnDmgNum(msg.x, msg.y, msg.damage, '#fb923c'); break;
+
+    case 'enemyDied':
+      spawnParticles(msg.x, msg.y, '#facc15', 22, 260); screenShake = Math.max(screenShake, 3); break;
+
+    case 'waveStart':
+      waveNumber = msg.wave; waveStateStr = 'active'; waveEnemiesLeft = msg.enemyCount || 0;
+      showWaveAnnouncement(msg.wave, msg.isBossWave, msg.enemyCount); break;
+
+    case 'waveComplete':
+      waveStateStr = 'complete'; xp += msg.bonusXP || 0; coins += msg.bonusCoins || 0;
+      checkLevelUp(); persistProgress();
+      showWaveComplete(msg.wave, msg.bonusCoins, msg.bonusXP); break;
+
+    case 'wavePrep': waveStateStr = 'prep'; waveCountdown = msg.timeLeft; break;
+
+    case 'xpGain':
+      xp += msg.amount; spawnDmgNum(msg.x, msg.y, '+' + msg.amount + 'XP', '#c084fc');
+      checkLevelUp(); persistProgress(); break;
+
+    case 'levelUp': level = msg.level; pendingSkillPoints = msg.skillPoints; showLevelUp(msg.level); break;
+
+    case 'pickup':
+      if (msg.dropType === 'hp' && localPlayer) {
+        localPlayer.health = msg.health; spawnDmgNum(localPlayer.x, localPlayer.y - 20, '+' + msg.amount + 'HP', '#22c55e');
+      } else if (msg.dropType === 'coins') {
+        coins += msg.amount; if (localPlayer) spawnDmgNum(localPlayer.x, localPlayer.y - 20, '+' + msg.amount + '$', '#fbbf24');
+        persistProgress();
+      } else if (msg.dropType === 'ammo') {
+        if (msg.weapons) playerWeapons = msg.weapons;
+        if (localPlayer) spawnDmgNum(localPlayer.x, localPlayer.y - 20, '+AMMO', '#38bdf8');
+      } else if (msg.dropType === 'powerup') {
+        const dur = { doubleDamage: 10000, rapidFire: 8000, invincibility: 5000, speedBoost: 12000, infiniteAmmo: 7000, multiShot: 10000 };
+        activePowerUps = activePowerUps.filter(p => p.type !== msg.powerupType);
+        activePowerUps.push({ type: msg.powerupType, expiresAt: Date.now() + (dur[msg.powerupType] || 8000) });
+        showNotification((POWERUP_LABELS[msg.powerupType] || msg.powerupType) + ' activated!');
+      }
       break;
 
-    case 'playerLeft':
-      players.delete(msg.playerId);
-      break;
+    case 'dropExpired': drops = drops.filter(d => d.id !== msg.dropId); break;
+
+    case 'weaponUnlocked':
+      if (msg.weapons) playerWeapons = msg.weapons;
+      coins = msg.coins; showNotification(WEAPON_NAMES[msg.weapon] + ' unlocked!'); persistProgress(); break;
   }
 }
 
-function applyState(serverPlayers, serverBullets) {
+function applyState(msg) {
   const newPlayers = new Map();
-  for (const sp of serverPlayers) {
-    newPlayers.set(sp.id, sp);
-  }
-  players = newPlayers;
-  bullets = serverBullets;
-
-  // Update local prediction
-  const myServer = players.get(localId);
-  if (!myServer || !localPlayer) return;
-
-  if (myServer.dead && !isDead) {
-    onDeath('');
-  }
-
-  localPlayer.health = myServer.health;
-  localPlayer.kills = myServer.kills;
-  localPlayer.deaths = myServer.deaths;
-  localPlayer.score = myServer.score;
-
-  // Server reconciliation
-  const ack = myServer.lastInput || 0;
-  pendingInputs = pendingInputs.filter(inp => inp.seq > ack);
-
-  localPlayer.x = myServer.x;
-  localPlayer.y = myServer.y;
-
+  for (const sp of msg.players) newPlayers.set(sp.id, sp);
+  players = newPlayers; bullets = msg.bullets || []; enemyBullets = msg.enemyBullets || [];
+  enemies = msg.enemies || []; drops = msg.drops || [];
+  if (msg.waveState) waveStateStr = msg.waveState;
+  if (typeof msg.wave === 'number') waveNumber = msg.wave;
+  if (typeof msg.waveCountdown === 'number') waveCountdown = msg.waveCountdown;
+  if (typeof msg.waveEnemiesLeft === 'number') waveEnemiesLeft = msg.waveEnemiesLeft;
+  const myData = players.get(localId);
+  if (!myData || !localPlayer) return;
+  if (myData.dead && !isDead) onDeath('');
+  localPlayer.health = myData.health; localPlayer.kills = myData.kills;
+  localPlayer.deaths = myData.deaths; localPlayer.score = myData.score;
+  if (myData.weapons) playerWeapons = myData.weapons;
+  if (myData.currentWeapon) currentWeapon = myData.currentWeapon;
+  if (myData.activePowerUps) activePowerUps = myData.activePowerUps;
+  const ack = myData.lastInput || 0;
+  pendingInputs = pendingInputs.filter(i => i.seq > ack);
+  localPlayer.x = myData.x; localPlayer.y = myData.y;
   for (const inp of pendingInputs) {
     localPlayer.x = clamp(localPlayer.x + inp.dx, PLAYER_RADIUS, worldW - PLAYER_RADIUS);
     localPlayer.y = clamp(localPlayer.y + inp.dy, PLAYER_RADIUS, worldH - PLAYER_RADIUS);
   }
-
-  // Update player count
   pcountEl.textContent = players.size;
 }
 
-// ─── Game Flow ───────────────────────────────────────────────────────────────
+// ─── Game Flow ────────────────────────────────────────────────────────────────
 function startGame() {
   if (!connected) return;
   const name = nameInput.value.trim() || '';
-  send({ type: 'join', name });
-  playBtn.disabled = true;
-  playBtn.textContent = 'Підключення...';
+  send({ type: 'join', name, savedXP: xp, savedCoins: coins, skills: { ...skills } });
+  playBtn.disabled = true; playBtn.textContent = 'Connecting...';
 }
 
 function onDeath(killerName) {
-  isDead = true;
-  deathScreen.style.display = 'flex';
-  deathInfo.textContent = killerName ? `Вбив: ${killerName}` : 'Респавн через 1.5с...';
-  spawnParticles(localPlayer.x, localPlayer.y, '#f97316', 30, 300);
+  isDead = true; deathScreen.style.display = 'flex';
+  deathInfo.textContent = killerName ? 'Killed by: ' + killerName : 'Respawning in 3s...';
+  if (localPlayer) spawnParticles(localPlayer.x, localPlayer.y, '#f97316', 30, 300);
+  screenShake = 10;
 }
 
-// ─── Input ───────────────────────────────────────────────────────────────────
+// ─── Input ────────────────────────────────────────────────────────────────────
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-    e.preventDefault();
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Space' && localPlayer && !isDead) tryDash();
+  if (localPlayer && !isDead) {
+    if (e.code === 'Digit1') switchWeapon('pistol');
+    if (e.code === 'Digit2') switchWeapon('shotgun');
+    if (e.code === 'Digit3') switchWeapon('smg');
+    if (e.code === 'Digit4') switchWeapon('sniper');
   }
-  // Dash on Space
-  if (e.code === 'Space' && localPlayer && !isDead) {
-    tryDash();
-  }
+  if (e.code === 'KeyK') toggleSkillsPanel();
+  if (e.code === 'Escape' && skillsPanel) skillsPanel.style.display = 'none';
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 canvas.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
-canvas.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+canvas.addEventListener('mouseup',   e => { if (e.button === 0) mouse.down = false; });
 canvas.addEventListener('mouseleave', () => { mouse.down = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-
 playBtn.addEventListener('click', startGame);
-nameInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') startGame();
-});
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') startGame(); });
+if (skillsBtn) skillsBtn.addEventListener('click', toggleSkillsPanel);
 
-// ─── Dash ────────────────────────────────────────────────────────────────────
-function tryDash() {
-  const now = performance.now();
-  if (now - lastDashTime < DASH_COOLDOWN) return;
-  lastDashTime = now;
-
-  const angle = localPlayer.angle;
-  const dashX = Math.cos(angle) * DASH_DISTANCE;
-  const dashY = Math.sin(angle) * DASH_DISTANCE;
-
-  localPlayer.x = clamp(localPlayer.x + dashX, PLAYER_RADIUS, worldW - PLAYER_RADIUS);
-  localPlayer.y = clamp(localPlayer.y + dashY, PLAYER_RADIUS, worldH - PLAYER_RADIUS);
-
-  spawnParticles(localPlayer.x, localPlayer.y, '#60a5fa', 12, 150);
-
-  // Send updated position immediately
-  const seq = ++inputSeq;
-  pendingInputs.push({ seq, dx: dashX, dy: dashY });
-  send({ type: 'move', x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle, seq });
+function switchWeapon(name) {
+  if (currentWeapon === name) return;
+  const wpn = playerWeapons[name];
+  if (!wpn) return;
+  if (name !== 'pistol' && (!wpn.ammo || wpn.ammo <= 0)) { showNotification(WEAPON_NAMES[name] + ': no ammo'); return; }
+  currentWeapon = name;
+  send({ type: 'switchWeapon', weapon: name });
 }
 
-// ─── Update ──────────────────────────────────────────────────────────────────
+// ─── Dash ─────────────────────────────────────────────────────────────────────
+function tryDash() {
+  const now = performance.now();
+  if (now - lastDashTime < getDashCooldown()) return;
+  lastDashTime = now;
+  const dx = Math.cos(localPlayer.angle) * DASH_DISTANCE;
+  const dy = Math.sin(localPlayer.angle) * DASH_DISTANCE;
+  localPlayer.x = clamp(localPlayer.x + dx, PLAYER_RADIUS, worldW - PLAYER_RADIUS);
+  localPlayer.y = clamp(localPlayer.y + dy, PLAYER_RADIUS, worldH - PLAYER_RADIUS);
+  spawnParticles(localPlayer.x, localPlayer.y, '#60a5fa', 12, 150);
+  pendingInputs.push({ seq: ++inputSeq, dx, dy });
+  send({ type: 'move', x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle, seq: inputSeq });
+}
+
+// ─── Update ───────────────────────────────────────────────────────────────────
 function update(dt) {
   if (!localPlayer || isDead) return;
-
   const now = performance.now();
-
-  // Aim angle
-  const aimX = camera.x + mouse.x;
-  const aimY = camera.y + mouse.y;
-  localPlayer.angle = Math.atan2(aimY - localPlayer.y, aimX - localPlayer.x);
-
-  // Movement
+  localPlayer.angle = Math.atan2(camera.y + mouse.y - localPlayer.y, camera.x + mouse.x - localPlayer.x);
   let mx = 0, my = 0;
-  if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
-  if (keys['KeyS'] || keys['ArrowDown']) my += 1;
-  if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+  if (keys['KeyW'] || keys['ArrowUp'])    my -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  my += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  mx -= 1;
   if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
-
   if (mx !== 0 || my !== 0) {
     const len = Math.hypot(mx, my);
-    const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? SPRINT_SPEED : PLAYER_SPEED;
-    const dx = (mx / len) * speed * dt;
-    const dy = (my / len) * speed * dt;
-
+    const hasSprint = keys['ShiftLeft'] || keys['ShiftRight'];
+    const speed = (hasSprint ? SPRINT_SPEED : PLAYER_SPEED) * playerSpeedMult();
+    const dx = (mx / len) * speed * dt, dy = (my / len) * speed * dt;
     localPlayer.x = clamp(localPlayer.x + dx, PLAYER_RADIUS, worldW - PLAYER_RADIUS);
     localPlayer.y = clamp(localPlayer.y + dy, PLAYER_RADIUS, worldH - PLAYER_RADIUS);
-
-    const seq = ++inputSeq;
-    pendingInputs.push({ seq, dx, dy });
+    pendingInputs.push({ seq: ++inputSeq, dx, dy });
+    if (Math.random() < 0.06) spawnParticles(localPlayer.x, localPlayer.y, 'rgba(100,100,100,0.25)', 1, 18);
   }
-
-  // Send position
   if (now - lastSendTime > SEND_RATE) {
-    const seq = inputSeq;
-    send({ type: 'move', x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle, seq });
+    send({ type: 'move', x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle, seq: inputSeq });
     lastSendTime = now;
   }
-
-  // Shooting
-  if (mouse.down && now - lastShotTime > SHOOT_COOLDOWN) {
+  const shootCd = getShootCooldown(currentWeapon);
+  const hasRapidFire = activePowerUps.some(p => p.type === 'rapidFire' && p.expiresAt > Date.now());
+  if (mouse.down && now - lastShotTime > (hasRapidFire ? shootCd / 2 : shootCd)) {
     send({ type: 'shoot', angle: localPlayer.angle });
     lastShotTime = now;
-    // Muzzle flash
-    const fx = localPlayer.x + Math.cos(localPlayer.angle) * (PLAYER_RADIUS + 12);
-    const fy = localPlayer.y + Math.sin(localPlayer.angle) * (PLAYER_RADIUS + 12);
-    spawnParticles(fx, fy, '#fde047', 6, 120);
+    spawnParticles(
+      localPlayer.x + Math.cos(localPlayer.angle) * (PLAYER_RADIUS + 12),
+      localPlayer.y + Math.sin(localPlayer.angle) * (PLAYER_RADIUS + 12),
+      '#fde047', 5, 120
+    );
   }
-
-  // Camera follow
-  const targetCx = clamp(localPlayer.x - canvas.width / 2, 0, worldW - canvas.width);
-  const targetCy = clamp(localPlayer.y - canvas.height / 2, 0, worldH - canvas.height);
-  camera.x += (targetCx - camera.x) * Math.min(1, dt * 8);
-  camera.y += (targetCy - camera.y) * Math.min(1, dt * 8);
-
-  // Particles
+  if (getSkillBonus('regen') > 0) {
+    regenTimer += dt;
+    if (regenTimer >= 1) { regenTimer = 0; localPlayer.health = Math.min(playerMaxHp(), localPlayer.health + getSkillBonus('regen') * 0.5); }
+  }
+  const tcx = clamp(localPlayer.x - canvas.width / 2, 0, worldW - canvas.width);
+  const tcy = clamp(localPlayer.y - canvas.height / 2, 0, worldH - canvas.height);
+  camera.x += (tcx - camera.x) * Math.min(1, dt * 8);
+  camera.y += (tcy - camera.y) * Math.min(1, dt * 8);
+  if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 28);
   updateParticles(dt);
-
-  // HUD
+  for (let i = damageNumbers.length - 1; i >= 0; i--) {
+    const dn = damageNumbers[i]; dn.life -= dt; dn.y -= 40 * dt;
+    if (dn.life <= 0) damageNumbers.splice(i, 1);
+  }
+  activePowerUps = activePowerUps.filter(p => p.expiresAt > Date.now());
   updateHUD();
 }
 
 function updateParticles(dt) {
   for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.life -= dt;
+    const p = particles[i]; p.life -= dt;
     if (p.life <= 0) { particles.splice(i, 1); continue; }
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.vx *= 0.92;
-    p.vy *= 0.92;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92;
   }
 }
-
 function spawnParticles(x, y, color, count, speed) {
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const vel = speed * (0.3 + Math.random() * 0.7);
-    particles.push({
-      x, y,
-      vx: Math.cos(angle) * vel,
-      vy: Math.sin(angle) * vel,
-      life: 0.2 + Math.random() * 0.3,
-      size: 2 + Math.random() * 3,
-      color
-    });
+    const angle = Math.random() * Math.PI * 2, vel = speed * (0.3 + Math.random() * 0.7);
+    particles.push({ x, y, vx: Math.cos(angle) * vel, vy: Math.sin(angle) * vel, life: 0.2 + Math.random() * 0.4, size: 2 + Math.random() * 3, color });
   }
-  // Cap particles
-  if (particles.length > 500) particles.splice(0, particles.length - 500);
+  if (particles.length > 600) particles.splice(0, particles.length - 600);
 }
+function spawnDmgNum(x, y, text, color) { damageNumbers.push({ x, y: y - 10, text: String(text), color, life: 0.9, size: 14 }); }
 
+// ─── HUD ──────────────────────────────────────────────────────────────────────
 function updateHUD() {
   if (!localPlayer) return;
-  const hp = Math.max(0, localPlayer.health);
-  healthBar.style.width = hp + '%';
-  healthText.textContent = hp;
-
-  if (hp > 60) {
-    healthBar.style.background = 'linear-gradient(90deg, #22c55e, #4ade80)';
-    healthText.style.color = '#4ade80';
-  } else if (hp > 30) {
-    healthBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
-    healthText.style.color = '#fbbf24';
-  } else {
-    healthBar.style.background = 'linear-gradient(90deg, #dc2626, #f87171)';
-    healthText.style.color = '#f87171';
+  const maxHp = playerMaxHp(), hp = clamp(localPlayer.health, 0, maxHp), hpPct = (hp / maxHp) * 100;
+  healthBar.style.width = hpPct + '%'; healthText.textContent = Math.round(hp);
+  if (hpPct > 60) { healthBar.style.background = 'linear-gradient(90deg, #22c55e, #4ade80)'; healthText.style.color = '#4ade80'; }
+  else if (hpPct > 30) { healthBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)'; healthText.style.color = '#fbbf24'; }
+  else { healthBar.style.background = 'linear-gradient(90deg, #dc2626, #f87171)'; healthText.style.color = '#f87171'; }
+  killsDisplay.textContent  = 'Kills: '  + (localPlayer.kills  || 0);
+  deathsDisplay.textContent = 'Deaths: ' + (localPlayer.deaths || 0);
+  scoreDisplay.textContent  = 'Score: '  + (localPlayer.score  || 0);
+  const curLvl = Math.floor(Math.sqrt((xp || 0) / 100));
+  const lvlXP  = curLvl * curLvl * 100, nextXP = (curLvl + 1) * (curLvl + 1) * 100;
+  if (xpBarFill) xpBarFill.style.width = clamp(((xp - lvlXP) / (nextXP - lvlXP)) * 100, 0, 100) + '%';
+  if (xpText)    xpText.textContent = 'XP ' + xp + ' / ' + nextXP;
+  if (levelBadge) {
+    levelBadge.textContent = 'Lv.' + curLvl;
+    levelBadge.style.color = curLvl >= 10 ? '#facc15' : curLvl >= 5 ? '#a78bfa' : '#38bdf8';
   }
-
-  killsDisplay.textContent = '☠ ' + localPlayer.kills;
-  deathsDisplay.textContent = '💀 ' + localPlayer.deaths;
-  scoreDisplay.textContent = '⭐ ' + localPlayer.score;
+  if (waveDisplay) {
+    if (waveStateStr === 'active') { waveDisplay.textContent = 'Wave ' + waveNumber + ' [' + waveEnemiesLeft + ']'; waveDisplay.style.color = '#f87171'; }
+    else { waveDisplay.textContent = 'Wave ' + (waveNumber + 1) + ' in ' + waveCountdown + 's'; waveDisplay.style.color = '#fbbf24'; }
+  }
+  if (coinsDisplay) coinsDisplay.textContent = 'Coins: ' + coins;
+  if (weaponDisplay) {
+    const wpn = playerWeapons[currentWeapon];
+    const ammoStr = (wpn && !WEAPON_AMMO_INF[currentWeapon]) ? ' [' + Math.max(0, wpn.ammo || 0) + ']' : ' [INF]';
+    weaponDisplay.textContent = (WEAPON_NAMES[currentWeapon] || currentWeapon) + ammoStr;
+    weaponDisplay.style.color = WEAPON_COLORS[currentWeapon] || '#fff';
+  }
+  if (powerupsDisplay) {
+    activePowerUps = activePowerUps.filter(p => p.expiresAt > Date.now());
+    powerupsDisplay.innerHTML = activePowerUps.map(p =>
+      '<span class="powerup-icon">' + (POWERUP_LABELS[p.type] || p.type) + ' ' + Math.ceil((p.expiresAt - Date.now()) / 1000) + 's</span>'
+    ).join('');
+  }
+  if (skillsBtn) skillsBtn.textContent = pendingSkillPoints > 0 ? ('Skills (' + pendingSkillPoints + ')') : 'Skills [K]';
 }
 
+// ─── Announcements ────────────────────────────────────────────────────────────
+function showWaveAnnouncement(wave, isBoss, count) {
+  if (!waveAnnouncement) return;
+  const title = waveAnnouncement.querySelector('.wave-title');
+  const sub   = waveAnnouncement.querySelector('.wave-sub');
+  if (title) title.textContent = isBoss ? ('WAVE ' + wave + ' - BOSS!') : ('WAVE ' + wave);
+  if (sub)   sub.textContent   = isBoss ? 'Boss incoming!' : 'Enemies: ' + (count || '?');
+  waveAnnouncement.style.display = 'block';
+  setTimeout(() => { if (waveAnnouncement) waveAnnouncement.style.display = 'none'; }, 3500);
+}
+function showWaveComplete(wave, bonusCoins, bonusXP) {
+  if (!waveAnnouncement) return;
+  const title = waveAnnouncement.querySelector('.wave-title');
+  const sub   = waveAnnouncement.querySelector('.wave-sub');
+  if (title) title.textContent = 'WAVE ' + wave + ' COMPLETE!';
+  if (sub)   sub.textContent   = '+' + bonusCoins + ' coins   +' + bonusXP + ' XP';
+  waveAnnouncement.style.display = 'block';
+  setTimeout(() => { if (waveAnnouncement) waveAnnouncement.style.display = 'none'; }, 4000);
+}
+
+// ─── Level Up ─────────────────────────────────────────────────────────────────
+function checkLevelUp() { const n = Math.floor(Math.sqrt(xp / 100)); if (n > level) level = n; }
+function showLevelUp(lvl) {
+  if (!levelupPopup) return;
+  pendingSkillPoints++;
+  const title = levelupPopup.querySelector('.levelup-title');
+  if (title) title.textContent = 'LEVEL UP! Lv.' + lvl;
+  renderSkillOptions();
+  levelupPopup.style.display = 'flex';
+}
+function renderSkillOptions() {
+  const container = document.getElementById('skill-options');
+  if (!container) return;
+  const available = Object.entries(SKILL_DEFS).filter(([k, d]) => (skills[k] || 0) < d.max);
+  const opts = available.sort(() => Math.random() - 0.5).slice(0, 3);
+  if (opts.length === 0) {
+    container.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:12px">All skills maxed!</p>';
+    setTimeout(() => { if (levelupPopup) levelupPopup.style.display = 'none'; }, 2000);
+    return;
+  }
+  container.innerHTML = opts.map(([k, d]) =>
+    '<button class="skill-choice-btn" onclick="pickSkill(\'' + k + '\')">' +
+    '<div class="skill-name">' + d.name + '</div>' +
+    '<div class="skill-level">Level ' + ((skills[k] || 0) + 1) + '/' + d.max + '</div></button>'
+  ).join('');
+}
+function pickSkill(key) {
+  skills[key] = Math.min(SKILL_DEFS[key].max, (skills[key] || 0) + 1);
+  pendingSkillPoints = Math.max(0, pendingSkillPoints - 1);
+  persistProgress();
+  if (levelupPopup) levelupPopup.style.display = 'none';
+  showNotification(SKILL_DEFS[key].name + ' upgraded!');
+}
+
+// ─── Skills Panel ─────────────────────────────────────────────────────────────
+function toggleSkillsPanel() {
+  if (!skillsPanel) return;
+  const visible = skillsPanel.style.display !== 'none';
+  skillsPanel.style.display = visible ? 'none' : 'block';
+  if (!visible) renderSkillsPanel();
+}
+function renderSkillsPanel() {
+  const container = document.getElementById('skills-tree');
+  if (!container) return;
+  const branches = { attack: 'Attack', defense: 'Defense', mobility: 'Mobility', utility: 'Utility' };
+  let html = '';
+  for (const [branch, label] of Object.entries(branches)) {
+    const bs = Object.entries(SKILL_DEFS).filter(([, d]) => d.branch === branch);
+    html += '<div class="skill-branch"><h3>' + label + '</h3>';
+    for (const [k, d] of bs) {
+      const cur = skills[k] || 0, maxed = cur >= d.max, canUp = !maxed && pendingSkillPoints > 0;
+      html += '<div class="skill-row"><span class="skill-label">' + d.name + '</span><span class="skill-pts">' + cur + '/' + d.max + '</span>' +
+              (canUp ? '<button class="skill-up-btn" onclick="pickSkill(\'' + k + '\')">+</button>' : '') + '</div>';
+    }
+    html += '</div>';
+  }
+  html += '<p class="skill-pts-info">Points available: <strong>' + pendingSkillPoints + '</strong></p>';
+  container.innerHTML = html;
+}
+function showNotification(text) {
+  const el = document.createElement('div'); el.className = 'game-notification'; el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 3000);
+}
+
+// ─── Kill Feed ────────────────────────────────────────────────────────────────
 function addKillFeed(killer, victim) {
-  killFeed.push({ killer, victim, fadeTime: Date.now() + 5000 });
+  killFeed.push({ killer, victim, fadeTime: Date.now() + 6000 });
   if (killFeed.length > 5) killFeed.shift();
   renderKillFeed();
 }
-
 function renderKillFeed() {
   const now = Date.now();
   killFeed = killFeed.filter(k => k.fadeTime > now);
   killFeedEl.innerHTML = killFeed.map(k =>
-    `<div class="kill-entry"><span style="color:#f87171">${esc(k.killer)}</span> ☠ <span style="color:#94a3b8">${esc(k.victim)}</span></div>`
+    '<div class="kill-entry"><span style="color:#f87171">' + esc(k.killer) + '</span> x <span style="color:#94a3b8">' + esc(k.victim) + '</span></div>'
   ).join('');
 }
+function esc(str) { const d = document.createElement('div'); d.textContent = String(str); return d.innerHTML; }
+function persistProgress() { writeSave({ xp, coins, skills: { ...skills }, skillPoints: pendingSkillPoints }); }
 
-function esc(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
-}
-
-// ─── Render ──────────────────────────────────────────────────────────────────
+// ─── Render ───────────────────────────────────────────────────────────────────
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const sx = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
+  const sy = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
   ctx.save();
-  ctx.translate(-camera.x, -camera.y);
-
-  drawWorld();
-  drawBullets();
-  drawParticles();
-  drawPlayers();
-
+  ctx.translate(-camera.x + sx, -camera.y + sy);
+  drawWorld(); drawDrops(); drawEnemyBullets(); drawBullets(); drawParticles(); drawEnemies(); drawPlayers(); drawDamageNumbers();
   ctx.restore();
   drawMinimap();
 }
-
 function drawWorld() {
-  // Background
-  ctx.fillStyle = '#0a0d14';
-  ctx.fillRect(0, 0, worldW, worldH);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth = 1;
-  const startX = Math.floor(camera.x / 50) * 50;
-  const startY = Math.floor(camera.y / 50) * 50;
-  const endX = camera.x + canvas.width;
-  const endY = camera.y + canvas.height;
-
-  for (let x = startX; x <= endX; x += 50) {
-    ctx.beginPath();
-    ctx.moveTo(x, Math.max(0, camera.y));
-    ctx.lineTo(x, Math.min(worldH, endY));
-    ctx.stroke();
-  }
-  for (let y = startY; y <= endY; y += 50) {
-    ctx.beginPath();
-    ctx.moveTo(Math.max(0, camera.x), y);
-    ctx.lineTo(Math.min(worldW, endX), y);
-    ctx.stroke();
-  }
-
-  // Border
-  ctx.strokeStyle = '#ef4444';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, worldW - 4, worldH - 4);
-
-  // Danger zone glow at borders
+  ctx.fillStyle = '#090c12'; ctx.fillRect(0, 0, worldW, worldH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1;
+  const gsx = Math.floor(camera.x / 60) * 60, gsy = Math.floor(camera.y / 60) * 60;
+  const gex = camera.x + canvas.width, gey = camera.y + canvas.height;
+  for (let x = gsx; x <= gex; x += 60) { ctx.beginPath(); ctx.moveTo(x, Math.max(0, camera.y)); ctx.lineTo(x, Math.min(worldH, gey)); ctx.stroke(); }
+  for (let y = gsy; y <= gey; y += 60) { ctx.beginPath(); ctx.moveTo(Math.max(0, camera.x), y); ctx.lineTo(Math.min(worldW, gex), y); ctx.stroke(); }
+  ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, worldW - 4, worldH - 4);
   const grd = ctx.createLinearGradient(0, 0, 30, 0);
-  grd.addColorStop(0, 'rgba(239,68,68,0.15)');
-  grd.addColorStop(1, 'rgba(239,68,68,0)');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, 30, worldH);
+  grd.addColorStop(0, 'rgba(239,68,68,0.15)'); grd.addColorStop(1, 'rgba(239,68,68,0)');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, 30, worldH);
 }
-
+function drawDrops() {
+  for (const d of drops) {
+    const color = DROP_COLORS[d.type] || '#fff', icon = DROP_ICONS[d.type] || '?';
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.004 + d.x * 0.1);
+    ctx.shadowColor = color; ctx.shadowBlur = 12 * pulse;
+    ctx.beginPath(); ctx.arc(d.x, d.y, 11, 0, Math.PI * 2);
+    ctx.fillStyle = color + '2a'; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(icon, d.x, d.y); ctx.textBaseline = 'alphabetic';
+    if (d.type === 'coins' && d.amount) { ctx.fillStyle = '#fbbf24'; ctx.font = '9px Arial'; ctx.fillText(d.amount, d.x, d.y + 18); }
+  }
+  ctx.shadowBlur = 0; ctx.textAlign = 'left';
+}
+function drawEnemyBullets() {
+  for (const b of enemyBullets) { ctx.shadowColor = '#f87171'; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI * 2); ctx.fillStyle = '#f87171'; ctx.fill(); }
+  ctx.shadowBlur = 0;
+}
+function drawEnemies() {
+  for (const e of enemies) {
+    const col = ENEMY_COLORS[e.type] || { body: '#888', outline: '#555' };
+    const r = ENEMY_RADIUS_CLIENT[e.type] || 20, isBoss = e.type === 'boss';
+    ctx.save(); ctx.translate(e.x, e.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(3, 5, r * 0.9, r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    if (isBoss) { ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 22; }
+    ctx.beginPath();
+    if (e.type === 'tank') { ctx.rect(-r, -r, r * 2, r * 2); }
+    else if (e.type === 'runner') { ctx.moveTo(0, -r); ctx.lineTo(r * 0.9, r * 0.8); ctx.lineTo(-r * 0.9, r * 0.8); ctx.closePath(); }
+    else if (e.type === 'boss') {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2, sr = i % 2 === 0 ? r : r * 0.55;
+        if (i === 0) ctx.moveTo(Math.cos(a) * sr, Math.sin(a) * sr);
+        else ctx.lineTo(Math.cos(a) * sr, Math.sin(a) * sr);
+      }
+      ctx.closePath();
+    } else { ctx.arc(0, 0, r, 0, Math.PI * 2); }
+    ctx.fillStyle = col.body; ctx.fill(); ctx.strokeStyle = col.outline; ctx.lineWidth = isBoss ? 3 : 2; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.rotate(e.angle);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r * 0.55, 0, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(r * 0.67, 0, r * 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    const hpPct = e.hp / e.maxHp, barW = isBoss ? 80 : 40;
+    ctx.fillStyle = '#111'; ctx.fillRect(e.x - barW / 2, e.y - r - 11, barW, 5);
+    ctx.fillStyle = hpPct > 0.6 ? '#22c55e' : hpPct > 0.3 ? '#f59e0b' : '#ef4444';
+    ctx.fillRect(e.x - barW / 2, e.y - r - 11, barW * hpPct, 5);
+    if (isBoss) {
+      ctx.fillStyle = '#ef4444'; ctx.font = 'bold 13px "Courier New"'; ctx.textAlign = 'center';
+      ctx.fillText('BOSS ' + e.hp + '/' + e.maxHp, e.x, e.y - r - 19);
+    } else {
+      ctx.fillStyle = col.body; ctx.font = '10px "Courier New"'; ctx.textAlign = 'center';
+      ctx.fillText(e.type, e.x, e.y + r + 13);
+    }
+  }
+  ctx.textAlign = 'left';
+}
 function drawPlayers() {
   for (const [id, player] of players) {
     if (player.dead) continue;
-
     const px = (id === localId && localPlayer) ? localPlayer.x : player.x;
     const py = (id === localId && localPlayer) ? localPlayer.y : player.y;
     const pa = (id === localId && localPlayer) ? localPlayer.angle : player.angle;
-
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(px + 3, py + 5, PLAYER_RADIUS * 0.9, PLAYER_RADIUS * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Body
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(pa);
-
-    // Gun
-    ctx.fillStyle = '#374151';
-    ctx.fillRect(PLAYER_RADIUS - 4, -3, 18, 6);
-    ctx.fillStyle = '#6b7280';
-    ctx.fillRect(PLAYER_RADIUS + 10, -2, 6, 4);
-
+    const isInvincible = player.activePowerUps && player.activePowerUps.some(p => p.type === 'invincibility');
+    if (isInvincible) { ctx.shadowColor = '#60a5fa'; ctx.shadowBlur = 20; }
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(px+3, py+5, PLAYER_RADIUS*0.9, PLAYER_RADIUS*0.5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.save(); ctx.translate(px, py); ctx.rotate(pa);
+    ctx.fillStyle = '#374151'; ctx.fillRect(PLAYER_RADIUS-4, -3, 18, 6);
+    ctx.fillStyle = '#6b7280'; ctx.fillRect(PLAYER_RADIUS+10, -2, 6, 4);
     ctx.restore();
-
-    // Player circle
-    ctx.beginPath();
-    ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = player.color || '#3b82f6';
-    ctx.fill();
-    ctx.strokeStyle = id === localId ? '#fff' : 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = id === localId ? 2.5 : 1;
-    ctx.stroke();
-
-    // Inner glow for local player
-    if (id === localId) {
-      ctx.beginPath();
-      ctx.arc(px, py, PLAYER_RADIUS - 4, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.fill();
-    }
-
-    // Name
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px "Courier New"';
-    ctx.textAlign = 'center';
+    ctx.beginPath(); ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI*2);
+    ctx.fillStyle = player.color || '#3b82f6'; ctx.fill();
+    ctx.strokeStyle = id === localId ? '#fff' : 'rgba(255,255,255,0.3)'; ctx.lineWidth = id === localId ? 2.5 : 1; ctx.stroke();
+    if (id === localId) { ctx.beginPath(); ctx.arc(px, py, PLAYER_RADIUS-4, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fill(); }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Courier New"'; ctx.textAlign = 'center';
     ctx.fillText(player.name || 'Player', px, py - PLAYER_RADIUS - 14);
-
-    // Health bar above player (not for local - that's in HUD)
     if (id !== localId) {
       const hp = player.health / 100;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(px - 20, py - PLAYER_RADIUS - 8, 40, 5);
-      ctx.fillStyle = hp > 0.5 ? '#22c55e' : hp > 0.25 ? '#f59e0b' : '#ef4444';
-      ctx.fillRect(px - 20, py - PLAYER_RADIUS - 8, 40 * hp, 5);
+      ctx.fillStyle = '#000'; ctx.fillRect(px-20, py-PLAYER_RADIUS-8, 40, 5);
+      ctx.fillStyle = hp > 0.5 ? '#22c55e' : hp > 0.25 ? '#f59e0b' : '#ef4444'; ctx.fillRect(px-20, py-PLAYER_RADIUS-8, 40*hp, 5);
+    }
+    if ((player.level || 0) > 0) {
+      ctx.fillStyle = (player.level||0) >= 10 ? '#facc15' : '#a78bfa'; ctx.font = 'bold 9px "Courier New"'; ctx.textAlign = 'center';
+      ctx.fillText('Lv.' + (player.level||0), px, py + PLAYER_RADIUS + 14);
     }
   }
+  ctx.textAlign = 'left';
 }
-
 function drawBullets() {
-  for (const b of bullets) {
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, BULLET_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = '#fde047';
-    ctx.fill();
-    ctx.shadowColor = '#fde047';
-    ctx.shadowBlur = 6;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
+  for (const b of bullets) { ctx.shadowColor = '#fde047'; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(b.x, b.y, BULLET_RADIUS, 0, Math.PI*2); ctx.fillStyle = '#fde047'; ctx.fill(); }
+  ctx.shadowBlur = 0;
 }
-
 function drawParticles() {
-  for (const p of particles) {
-    const alpha = clamp(p.life / 0.3, 0, 1);
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  for (const p of particles) { const alpha = clamp(p.life / 0.3, 0, 1); ctx.globalAlpha = alpha; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size*alpha, 0, Math.PI*2); ctx.fill(); }
   ctx.globalAlpha = 1;
 }
-
+function drawDamageNumbers() {
+  for (const dn of damageNumbers) {
+    ctx.globalAlpha = clamp(dn.life / 0.5, 0, 1); ctx.fillStyle = dn.color;
+    ctx.font = 'bold ' + dn.size + 'px "Courier New"'; ctx.textAlign = 'center'; ctx.fillText(dn.text, dn.x, dn.y);
+  }
+  ctx.globalAlpha = 1; ctx.textAlign = 'left';
+}
 function drawMinimap() {
   const mw = 160, mh = 160;
-  minimapCtx.clearRect(0, 0, mw, mh);
-  minimapCtx.fillStyle = 'rgba(10,13,20,0.8)';
-  minimapCtx.fillRect(0, 0, mw, mh);
-
-  // Border
-  minimapCtx.strokeStyle = '#334155';
-  minimapCtx.strokeRect(0, 0, mw, mh);
-
-  const scaleX = mw / worldW;
-  const scaleY = mh / worldH;
-
-  // Draw all players as dots
+  minimapCtx.clearRect(0, 0, mw, mh); minimapCtx.fillStyle = 'rgba(10,13,20,0.85)'; minimapCtx.fillRect(0, 0, mw, mh);
+  minimapCtx.strokeStyle = '#334155'; minimapCtx.strokeRect(0, 0, mw, mh);
+  const scx = mw / worldW, scy = mh / worldH;
+  for (const e of enemies) {
+    minimapCtx.beginPath(); minimapCtx.arc(e.x*scx, e.y*scy, e.type==='boss'?4:2, 0, Math.PI*2);
+    minimapCtx.fillStyle = (ENEMY_COLORS[e.type]||{}).body||'#888'; minimapCtx.fill();
+  }
+  for (const d of drops) {
+    minimapCtx.beginPath(); minimapCtx.arc(d.x*scx, d.y*scy, 2, 0, Math.PI*2);
+    minimapCtx.fillStyle = DROP_COLORS[d.type]||'#fff'; minimapCtx.fill();
+  }
   for (const [id, player] of players) {
     if (player.dead) continue;
-    const mx = player.x * scaleX;
-    const my = player.y * scaleY;
-
-    minimapCtx.beginPath();
-    minimapCtx.arc(mx, my, id === localId ? 4 : 2.5, 0, Math.PI * 2);
-    minimapCtx.fillStyle = id === localId ? '#fff' : player.color;
-    minimapCtx.fill();
+    minimapCtx.beginPath(); minimapCtx.arc(player.x*scx, player.y*scy, id===localId?4:2.5, 0, Math.PI*2);
+    minimapCtx.fillStyle = id===localId?'#fff':(player.color||'#3b82f6'); minimapCtx.fill();
   }
-
-  // Camera viewport
   if (localPlayer) {
-    minimapCtx.strokeStyle = 'rgba(255,255,255,0.3)';
-    minimapCtx.lineWidth = 1;
-    minimapCtx.strokeRect(
-      camera.x * scaleX, camera.y * scaleY,
-      canvas.width * scaleX, canvas.height * scaleY
-    );
+    minimapCtx.strokeStyle = 'rgba(255,255,255,0.3)'; minimapCtx.lineWidth = 1;
+    minimapCtx.strokeRect(camera.x*scx, camera.y*scy, canvas.width*scx, canvas.height*scy);
   }
 }
 
-// ─── Game Loop ───────────────────────────────────────────────────────────────
+// ─── Game Loop ────────────────────────────────────────────────────────────────
 function loop(now) {
   if (!running) return;
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
-
-  update(dt);
-  render();
-  renderKillFeed();
+  update(dt); render(); renderKillFeed();
   requestAnimationFrame(loop);
 }
 
-// ─── Utils ───────────────────────────────────────────────────────────────────
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
-// ─── Init ────────────────────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────────────────────
 connectWS();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shooter MVP</title>
+  <title>Shooter PvE</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%230f172a'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%2338bdf8'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -12,44 +12,97 @@
 
   <!-- HUD (visible during gameplay) -->
   <div id="hud" style="display:none;">
+    <!-- XP Bar (top of screen) -->
+    <div id="xp-bar-container">
+      <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
+      <span id="xp-text">XP 0 / 100</span>
+    </div>
+    <!-- Level badge -->
+    <div id="level-badge">Lv.0</div>
+    <!-- Wave display -->
+    <div id="wave-display">Wave 1 in 5s</div>
+    <!-- Coins -->
+    <div id="coins-display">Coins: 0</div>
+    <!-- Current weapon -->
+    <div id="weapon-display">Pistol [INF]</div>
+    <!-- Active power-ups -->
+    <div id="powerups-display"></div>
+    <!-- Skills button -->
+    <button id="skills-btn">Skills [K]</button>
+    <!-- Health bar -->
     <div id="health-bar-container">
       <span id="health-label">HP</span>
       <div id="health-bar-bg"><div id="health-bar"></div></div>
       <span id="health-text">100</span>
     </div>
     <div id="stats">
-      <span id="kills-display">☠ 0</span>
-      <span id="deaths-display">💀 0</span>
-      <span id="score-display">⭐ 0</span>
+      <span id="kills-display">Kills: 0</span>
+      <span id="deaths-display">Deaths: 0</span>
+      <span id="score-display">Score: 0</span>
     </div>
     <div id="kill-feed"></div>
     <div id="minimap"><canvas id="minimap-canvas" width="160" height="160"></canvas></div>
-    <div id="player-count">Гравців: <span id="pcount">0</span></div>
+    <div id="player-count">Players: <span id="pcount">0</span></div>
+    <!-- Weapon selector bar -->
+    <div id="weapon-selector">
+      <div class="ws-slot" data-key="1">1<br><span>Pistol</span></div>
+      <div class="ws-slot" data-key="2">2<br><span>Shotgun</span></div>
+      <div class="ws-slot" data-key="3">3<br><span>SMG</span></div>
+      <div class="ws-slot" data-key="4">4<br><span>Sniper</span></div>
+    </div>
+  </div>
+
+  <!-- Wave announcement overlay -->
+  <div id="wave-announcement" style="display:none;">
+    <div class="wave-title">WAVE 1</div>
+    <div class="wave-sub">Enemies incoming!</div>
+  </div>
+
+  <!-- Level-up popup -->
+  <div id="levelup-popup" style="display:none;">
+    <div class="levelup-box">
+      <div class="levelup-title">LEVEL UP!</div>
+      <p class="levelup-sub">Choose a skill upgrade:</p>
+      <div id="skill-options"></div>
+    </div>
+  </div>
+
+  <!-- Skills Panel -->
+  <div id="skills-panel" style="display:none;">
+    <div id="skills-panel-inner">
+      <div class="skills-header">
+        <h2>Skills</h2>
+        <button onclick="toggleSkillsPanel()">✕</button>
+      </div>
+      <div id="skills-tree"></div>
+    </div>
   </div>
 
   <!-- Start Screen -->
   <div id="start-screen">
     <div class="screen-box">
-      <h1>☠ SHOOTER</h1>
-      <p class="subtitle">Мультиплеєрний 2D шутер</p>
+      <h1>☠ SHOOTER PvE</h1>
+      <p class="subtitle">Top-down shooter with AI enemies</p>
       <div class="controls-info">
-        <div><kbd>W A S D</kbd> — рух</div>
-        <div><kbd>Миша</kbd> — прицілювання</div>
-        <div><kbd>ЛКМ</kbd> — стріляти</div>
-        <div><kbd>Shift</kbd> — спринт (деш)</div>
-        <div><kbd>R</kbd> — перезарядка</div>
+        <div><kbd>W A S D</kbd> — move</div>
+        <div><kbd>Mouse</kbd> — aim</div>
+        <div><kbd>LMB</kbd> — shoot</div>
+        <div><kbd>Space</kbd> — dash</div>
+        <div><kbd>Shift</kbd> — sprint</div>
+        <div><kbd>1-4</kbd> — switch weapon</div>
+        <div><kbd>K</kbd> — skills panel</div>
       </div>
-      <input type="text" id="name-input" placeholder="Твоє ім'я..." maxlength="16" autocomplete="off" />
-      <button id="play-btn" disabled>Підключення...</button>
-      <p id="status-text" class="status connecting">Підключення до сервера...</p>
+      <input type="text" id="name-input" placeholder="Your name..." maxlength="16" autocomplete="off" />
+      <button id="play-btn" disabled>Connecting...</button>
+      <p id="status-text" class="status connecting">Connecting to server...</p>
     </div>
   </div>
 
   <!-- Death Screen -->
   <div id="death-screen" style="display:none;">
     <div class="screen-box">
-      <h1>💀 ЗАГИНУВ</h1>
-      <p id="death-info">Респавн...</p>
+      <h1>💀 YOU DIED</h1>
+      <p id="death-info">Respawning...</p>
     </div>
   </div>
 
