@@ -222,9 +222,9 @@ function killEnemy(enemy, killerId, now) {
 
 function applyDamageToPlayer(player, playerId, damage, killerId, now) {
   // Check invincibility
-  const now2 = Date.now();
+  const checkTime = Date.now();
   if (player.activePowerUps) {
-    player.activePowerUps = player.activePowerUps.filter(p => p.expiresAt > now2);
+    player.activePowerUps = player.activePowerUps.filter(p => p.expiresAt > checkTime);
     if (player.activePowerUps.some(p => p.type === 'invincibility')) return;
   }
 
@@ -236,7 +236,7 @@ function applyDamageToPlayer(player, playerId, damage, killerId, now) {
     player.deathTime = now;
 
     const killerObj = killerId ? players.get(killerId) : null;
-    const killerName = killerObj ? killerObj.name : 'Зомбі';
+    const killerName = killerObj ? killerObj.name : 'Enemy';
 
     killFeed.push({ killer: killerName, victim: player.name, time: now });
     if (killFeed.length > MAX_KILL_FEED) killFeed.shift();
@@ -767,7 +767,7 @@ wss.on('connection', (ws) => {
           const pwpn  = player.weapons[wname];
 
           // Check ammo
-          const now3 = Date.now();
+          const shootTime = Date.now();
           const hasInfiniteAmmo = player.activePowerUps &&
             player.activePowerUps.some(p => p.type === 'infiniteAmmo');
           if (!wdef.infiniteAmmo && !hasInfiniteAmmo && pwpn && pwpn.ammo <= 0) {
@@ -795,7 +795,7 @@ wss.on('connection', (ws) => {
               angle,
               ownerId: connData.playerId,
               damage: dmg,
-              createdAt: now3,
+              createdAt: shootTime,
             });
           }
           break;
@@ -821,6 +821,7 @@ wss.on('connection', (ws) => {
           if (!player) return;
           const wn = msg.weapon;
           const UNLOCK_COST = { shotgun: 400, smg: 600, sniper: 900 };
+          if (!Object.prototype.hasOwnProperty.call(UNLOCK_COST, wn)) break;
           const cost = UNLOCK_COST[wn];
           if (cost && player.coins >= cost && player.weapons[wn] && player.weapons[wn].ammo === 0) {
             player.coins -= cost;

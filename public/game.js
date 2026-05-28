@@ -419,9 +419,11 @@ function updateHUD() {
   }
   if (powerupsDisplay) {
     activePowerUps = activePowerUps.filter(p => p.expiresAt > Date.now());
-    powerupsDisplay.innerHTML = activePowerUps.map(p =>
-      '<span class="powerup-icon">' + (POWERUP_LABELS[p.type] || p.type) + ' ' + Math.ceil((p.expiresAt - Date.now()) / 1000) + 's</span>'
-    ).join('');
+    powerupsDisplay.innerHTML = activePowerUps.map(p => {
+      const label = POWERUP_LABELS[p.type] || 'power-up';
+      const secs = Math.ceil((p.expiresAt - Date.now()) / 1000);
+      return '<span class="powerup-icon">' + label + ' ' + secs + 's</span>';
+    }).join('');
   }
   if (skillsBtn) skillsBtn.textContent = pendingSkillPoints > 0 ? ('Skills (' + pendingSkillPoints + ')') : 'Skills [K]';
 }
@@ -490,20 +492,32 @@ function toggleSkillsPanel() {
 function renderSkillsPanel() {
   const container = document.getElementById('skills-tree');
   if (!container) return;
+  container.innerHTML = '';
   const branches = { attack: 'Attack', defense: 'Defense', mobility: 'Mobility', utility: 'Utility' };
-  let html = '';
   for (const [branch, label] of Object.entries(branches)) {
     const bs = Object.entries(SKILL_DEFS).filter(([, d]) => d.branch === branch);
-    html += '<div class="skill-branch"><h3>' + label + '</h3>';
+    const branchDiv = document.createElement('div'); branchDiv.className = 'skill-branch';
+    const heading = document.createElement('h3'); heading.textContent = label; branchDiv.appendChild(heading);
     for (const [k, d] of bs) {
       const cur = skills[k] || 0, maxed = cur >= d.max, canUp = !maxed && pendingSkillPoints > 0;
-      html += '<div class="skill-row"><span class="skill-label">' + d.name + '</span><span class="skill-pts">' + cur + '/' + d.max + '</span>' +
-              (canUp ? '<button class="skill-up-btn" onclick="pickSkill(\'' + k + '\')">+</button>' : '') + '</div>';
+      const row = document.createElement('div'); row.className = 'skill-row';
+      const nameSpan = document.createElement('span'); nameSpan.className = 'skill-label'; nameSpan.textContent = d.name;
+      const ptsSpan  = document.createElement('span'); ptsSpan.className = 'skill-pts';  ptsSpan.textContent = cur + '/' + d.max;
+      row.appendChild(nameSpan); row.appendChild(ptsSpan);
+      if (canUp) {
+        const btn = document.createElement('button'); btn.className = 'skill-up-btn'; btn.textContent = '+';
+        const skillKey = k;
+        btn.addEventListener('click', () => { pickSkill(skillKey); renderSkillsPanel(); });
+        row.appendChild(btn);
+      }
+      branchDiv.appendChild(row);
     }
-    html += '</div>';
+    container.appendChild(branchDiv);
   }
-  html += '<p class="skill-pts-info">Points available: <strong>' + pendingSkillPoints + '</strong></p>';
-  container.innerHTML = html;
+  const info = document.createElement('p'); info.className = 'skill-pts-info';
+  const strong = document.createElement('strong'); strong.textContent = String(pendingSkillPoints);
+  info.textContent = 'Points available: '; info.appendChild(strong);
+  container.appendChild(info);
 }
 function showNotification(text) {
   const el = document.createElement('div'); el.className = 'game-notification'; el.textContent = text;
