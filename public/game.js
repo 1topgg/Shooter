@@ -1142,37 +1142,134 @@ function drawPlayers() {
     const py = (id === localId && localPlayer) ? localPlayer.y : player.y;
     const pa = (id === localId && localPlayer) ? localPlayer.angle : player.angle;
     const isInvincible = player.activePowerUps && player.activePowerUps.some(p => p.type === 'invincibility');
-    if (isInvincible) { ctx.shadowColor = '#60a5fa'; ctx.shadowBlur = 20; }
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(px+3, py+5, PLAYER_RADIUS*0.9, PLAYER_RADIUS*0.5, 0, 0, Math.PI*2); ctx.fill();
-    ctx.save(); ctx.translate(px, py); ctx.rotate(pa);
-    ctx.fillStyle = '#374151'; ctx.fillRect(PLAYER_RADIUS-4, -3, 18, 6);
-    ctx.fillStyle = '#6b7280'; ctx.fillRect(PLAYER_RADIUS+10, -2, 6, 4);
+    const isLocalPlayer = id === localId;
+    
+    // Enhanced shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; 
+    ctx.beginPath(); 
+    ctx.ellipse(px+3, py+6, PLAYER_RADIUS*0.95, PLAYER_RADIUS*0.55, 0, 0, Math.PI*2); 
+    ctx.fill();
+    
+    // Invincibility glow
+    if (isInvincible) { 
+      ctx.shadowColor = '#60a5fa'; 
+      ctx.shadowBlur = 25; 
+      ctx.strokeStyle = '#60a5fa';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(px, py, PLAYER_RADIUS + 4, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    
+    // Weapon (gun)
+    ctx.save(); 
+    ctx.translate(px, py); 
+    ctx.rotate(pa);
+    ctx.fillStyle = '#4b5563'; 
+    ctx.fillRect(PLAYER_RADIUS-4, -4, 20, 8);
+    ctx.fillStyle = '#6b7280'; 
+    ctx.fillRect(PLAYER_RADIUS+12, -2, 6, 4);
     ctx.restore();
-    ctx.beginPath(); ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI*2);
-    ctx.fillStyle = player.color || '#3b82f6'; ctx.fill();
-    ctx.strokeStyle = id === localId ? '#fff' : 'rgba(255,255,255,0.3)'; ctx.lineWidth = id === localId ? 2.5 : 1; ctx.stroke();
-    if (id === localId) { ctx.beginPath(); ctx.arc(px, py, PLAYER_RADIUS-4, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fill(); }
+    
+    // Player body with gradient
+    ctx.beginPath(); 
+    ctx.arc(px, py, PLAYER_RADIUS, 0, Math.PI*2);
+    
+    const playerGrad = ctx.createRadialGradient(px - 5, py - 5, 0, px, py, PLAYER_RADIUS);
+    const playerColor = player.color || '#3b82f6';
+    playerGrad.addColorStop(0, lightenColor(playerColor, 30));
+    playerGrad.addColorStop(1, playerColor);
+    ctx.fillStyle = playerGrad;
+    ctx.fill();
+    
+    // Player outline
+    ctx.strokeStyle = isLocalPlayer ? '#fbbf24' : 'rgba(255,255,255,0.4)'; 
+    ctx.lineWidth = isLocalPlayer ? 3 : 2; 
+    ctx.shadowColor = isLocalPlayer ? '#fbbf24' : 'transparent';
+    ctx.shadowBlur = isLocalPlayer ? 12 : 0;
+    ctx.stroke();
+    
+    // Highlight for local player
+    if (isLocalPlayer) { 
+      ctx.beginPath(); 
+      ctx.arc(px, py, PLAYER_RADIUS-5, 0, Math.PI*2); 
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; 
+      ctx.fill(); 
+    }
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Courier New"'; ctx.textAlign = 'center';
+    
+    // Player name with better visibility
+    ctx.fillStyle = '#000'; 
+    ctx.font = 'bold 12px Arial'; 
+    ctx.textAlign = 'center';
+    ctx.fillText(player.name || 'Player', px + 1, py - PLAYER_RADIUS - 13);
+    ctx.fillStyle = isLocalPlayer ? '#fbbf24' : '#e0f2fe'; 
+    ctx.font = 'bold 12px Arial'; 
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 3;
     ctx.fillText(player.name || 'Player', px, py - PLAYER_RADIUS - 14);
+    ctx.shadowBlur = 0;
+    
+    // Health bar with border
     const maxHp = Math.max(100, player.maxHealth || 100);
     const hp = clamp((player.health || 0) / maxHp, 0, 1);
-    ctx.fillStyle = '#000'; ctx.fillRect(px - 22, py - PLAYER_RADIUS - 8, 44, 6);
-    ctx.fillStyle = hp > 0.5 ? '#22c55e' : hp > 0.25 ? '#f59e0b' : '#ef4444';
-    ctx.fillRect(px - 22, py - PLAYER_RADIUS - 8, 44 * hp, 6);
+    ctx.fillStyle = '#1e293b'; 
+    ctx.fillRect(px - 24, py - PLAYER_RADIUS - 9, 48, 7);
+    
+    const hpGrad = ctx.createLinearGradient(px - 22, 0, px + 22, 0);
+    if (hp > 0.5) {
+      hpGrad.addColorStop(0, '#22c55e');
+      hpGrad.addColorStop(1, '#4ade80');
+    } else if (hp > 0.25) {
+      hpGrad.addColorStop(0, '#f59e0b');
+      hpGrad.addColorStop(1, '#fbbf24');
+    } else {
+      hpGrad.addColorStop(0, '#dc2626');
+      hpGrad.addColorStop(1, '#ef4444');
+    }
+    ctx.fillStyle = hpGrad;
+    ctx.fillRect(px - 22, py - PLAYER_RADIUS - 8, 44 * hp, 5);
+    
+    // Armor bar
     const armor = Math.max(0, player.armor || 0);
     if (armor > 0) {
       const ap = clamp(armor / 100, 0, 1);
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px - 22, py - PLAYER_RADIUS - 2, 44, 4);
-      ctx.fillStyle = '#60a5fa';
+      ctx.fillRect(px - 22, py - PLAYER_RADIUS - 2, 44, 5);
+      const armorGrad = ctx.createLinearGradient(px - 22, 0, px + 22, 0);
+      armorGrad.addColorStop(0, '#3b82f6');
+      armorGrad.addColorStop(1, '#60a5fa');
+      ctx.fillStyle = armorGrad;
       ctx.fillRect(px - 22, py - PLAYER_RADIUS - 2, 44 * ap, 4);
     }
+    
+    // Level badge
     if ((player.level || 0) > 0) {
-      ctx.fillStyle = (player.level||0) >= 10 ? '#facc15' : '#a78bfa'; ctx.font = 'bold 9px "Courier New"'; ctx.textAlign = 'center';
-      ctx.fillText('Lv.' + (player.level||0), px, py + PLAYER_RADIUS + 14);
+      const lvl = player.level || 0;
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(px - 18, py + PLAYER_RADIUS + 8, 36, 14);
+      ctx.fillStyle = lvl >= 10 ? '#fbbf24' : '#a78bfa'; 
+      ctx.font = 'bold 10px Arial'; 
+      ctx.textAlign = 'center';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 2;
+      ctx.fillText('Lv.' + lvl, px, py + PLAYER_RADIUS + 18);
+      ctx.shadowBlur = 0;
     }
   }
+  ctx.textAlign = 'left';
+}
+
+// Helper function to lighten colors
+function lightenColor(color, percent) {
+  const num = parseInt(color.replace('#',''), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.min(255, (num >> 16) + amt);
+  const G = Math.min(255, (num >> 8 & 0x00FF) + amt);
+  const B = Math.min(255, (num & 0x0000FF) + amt);
+  return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+}
   ctx.textAlign = 'left';
 }
 function drawBullets() {
