@@ -35,10 +35,29 @@ const WAVE_DIFFICULTY_SCALE = 0.08; // +8% enemy HP and damage per wave
 
 // Weapon definitions (server-authoritative)
 const WEAPONS = {
-  pistol:  { damage: 20, bulletCount: 1, spread: 0,    baseCooldown: 150,  infiniteAmmo: true,  maxAmmo: Infinity },
-  shotgun: { damage: 14, bulletCount: 6, spread: 0.35, baseCooldown: 900,  infiniteAmmo: false, maxAmmo: 48 },
-  smg:     { damage: 8,  bulletCount: 1, spread: 0.08, baseCooldown: 80,   infiniteAmmo: false, maxAmmo: 120 },
-  sniper:  { damage: 90, bulletCount: 1, spread: 0,    baseCooldown: 1500, infiniteAmmo: false, maxAmmo: 15 },
+  pistol:  { damage: 20, bulletCount: 1, spread: 0,    baseCooldown: 150,  infiniteAmmo: true,  maxAmmo: Infinity, magazineSize: Infinity, reloadMs: 0 },
+  shotgun: { damage: 14, bulletCount: 6, spread: 0.35, baseCooldown: 900,  infiniteAmmo: false, maxAmmo: 48, magazineSize: 8, reloadMs: 1200 },
+  smg:     { damage: 8,  bulletCount: 1, spread: 0.08, baseCooldown: 80,   infiniteAmmo: false, maxAmmo: 120, magazineSize: 30, reloadMs: 1500 },
+  sniper:  { damage: 90, bulletCount: 1, spread: 0,    baseCooldown: 1500, infiniteAmmo: false, maxAmmo: 15, magazineSize: 5, reloadMs: 1800 },
+};
+const SHOP_ITEMS = {
+  unlock_shotgun: { cost: 400, type: 'unlockWeapon', weapon: 'shotgun' },
+  unlock_smg: { cost: 600, type: 'unlockWeapon', weapon: 'smg' },
+  unlock_sniper: { cost: 900, type: 'unlockWeapon', weapon: 'sniper' },
+  ammo_shotgun: { cost: 120, type: 'ammo', weapon: 'shotgun', amount: 24 },
+  ammo_smg: { cost: 120, type: 'ammo', weapon: 'smg', amount: 60 },
+  ammo_sniper: { cost: 150, type: 'ammo', weapon: 'sniper', amount: 8 },
+  medkit: { cost: 120, type: 'heal', amount: 45 },
+  armor_small: { cost: 160, type: 'armor', amount: 25 },
+  perk_speed: { cost: 320, type: 'perk', perk: 'perk_speed' },
+  perk_reload: { cost: 300, type: 'perk', perk: 'perk_reload' },
+  perk_crit: { cost: 380, type: 'perk', perk: 'perk_crit' },
+};
+const DIFFICULTY_MULT = {
+  easy: { enemyHp: 0.8, enemyDmg: 0.8, playerDmgTaken: 0.85 },
+  normal: { enemyHp: 1, enemyDmg: 1, playerDmgTaken: 1 },
+  hard: { enemyHp: 1.2, enemyDmg: 1.2, playerDmgTaken: 1.2 },
+  insane: { enemyHp: 1.45, enemyDmg: 1.4, playerDmgTaken: 1.45 },
 };
 
 // Enemy type radii
@@ -110,6 +129,15 @@ const waveState = {
   enemiesSpawned: 0,
   totalEnemiesThisWave: 0,
 };
+const matchConfig = {
+  mode: 'survival',
+  difficulty: 'normal',
+  friendlyFire: false,
+  bots: 6,
+  fragLimit: 25,
+  roundTimeMin: 8,
+  roundStartedAt: Date.now(),
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function createId() {
@@ -175,6 +203,11 @@ function getActivePlayers() {
   return list;
 }
 
+function sameTeam(a, b) {
+  if (!a || !b) return false;
+  return (a.team || 'solo') === (b.team || 'solo');
+}
+
 function updatePlayerLevel(player) {
   const newLevel = calculateLevel(player.xp);
   if (newLevel > (player.level || 0)) {
@@ -230,8 +263,7 @@ function killEnemy(enemy, killerId, now) {
 }
 
 function getPlayerMaxHealth(player) {
-  // Accounts for maxHp skill bonus applied on join
-  return player.health > MAX_HEALTH ? player.health : MAX_HEALTH;
+  return MAX_HEALTH + (player.maxHealthBonus || 0);
 }
 
 function applyDamageToPlayer(player, playerId, damage, killerId, now) {
@@ -242,15 +274,24 @@ function applyDamageToPlayer(player, playerId, damage, killerId, now) {
     if (player.activePowerUps.some(p => p.type === 'invincibility')) return;
   }
 
-  player.health = Math.max(0, player.health - damage);
+  const effectiveDamage = Math.max(1, Math.round(damage * (player.damageTakenMult || 1)));
+  let finalDamage = effectiveDamage;
+  if (player.armor > 0) {
+    const absorbed = Math.min(player.armor, Math.ceil(effectiveDamage * 0.55));
+    player.armor -= absorbed;
+    finalDamage = Math.max(1, effectiveDamage - absorbed);
+  }
+  player.health = Math.max(0, player.health - finalDamage);
 
   if (player.health <= 0 && !player.dead) {
     player.dead = true;
     player.deaths = (player.deaths || 0) + 1;
     player.deathTime = now;
+    player.killstreak = 0;
 
     const killerObj = killerId ? players.get(killerId) : null;
     const killerName = killerObj ? killerObj.name : 'Enemy';
+    if (killerObj) killerObj.killstreak = (killerObj.killstreak || 0) + 1;
 
     killFeed.push({ killer: killerName, victim: player.name, time: now });
     if (killFeed.length > MAX_KILL_FEED) killFeed.shift();
@@ -271,6 +312,8 @@ function applyDamageToPlayer(player, playerId, damage, killerId, now) {
     x: player.x,
     y: player.y,
     health: player.health,
+    armor: player.armor,
+    damage: finalDamage,
   });
 }
 
@@ -284,6 +327,12 @@ function pickupDrop(player, playerId, drop) {
       const wpn = player.weapons[cw];
       if (wpn && wpn.maxAmmo !== Infinity) {
         wpn.ammo = Math.min(wpn.maxAmmo, (wpn.ammo || 0) + drop.amount);
+        if ((wpn.ammoInClip || 0) === 0 && wpn.ammo > 0) {
+          const need = Math.max(0, (wpn.magazineSize || 0) - (wpn.ammoInClip || 0));
+          const load = Math.min(need, wpn.ammo);
+          wpn.ammoInClip = (wpn.ammoInClip || 0) + load;
+          wpn.ammo -= load;
+        }
       }
       break;
     }
@@ -311,26 +360,107 @@ function pickupDrop(player, playerId, drop) {
   });
 }
 
+function startReload(player, playerId, now) {
+  const wname = player.currentWeapon || 'pistol';
+  const wdef = WEAPONS[wname] || WEAPONS.pistol;
+  const weapon = player.weapons[wname];
+  if (!weapon || wdef.infiniteAmmo || player.dead) return false;
+  if ((weapon.ammo || 0) <= 0) return false;
+  if ((weapon.ammoInClip || 0) >= (weapon.magazineSize || wdef.magazineSize)) return false;
+  if (player.reloading && player.reloadEndAt > now) return false;
+  const reloadMs = Math.max(200, Math.round((weapon.reloadMs || wdef.reloadMs || 1000) * (player.reloadMult || 1)));
+  player.reloading = true;
+  player.reloadEndAt = now + reloadMs;
+  player.reloadWeapon = wname;
+  sendToPlayer(playerId, { type: 'reloadStart', playerId, weapon: wname, duration: reloadMs });
+  return true;
+}
+
+function completeReload(player, playerId) {
+  const wname = player.reloadWeapon || player.currentWeapon || 'pistol';
+  const wdef = WEAPONS[wname] || WEAPONS.pistol;
+  const weapon = player.weapons[wname];
+  if (!weapon || wdef.infiniteAmmo) return;
+  const magSize = weapon.magazineSize || wdef.magazineSize || 0;
+  const need = Math.max(0, magSize - (weapon.ammoInClip || 0));
+  const load = Math.min(need, weapon.ammo || 0);
+  weapon.ammoInClip = (weapon.ammoInClip || 0) + load;
+  weapon.ammo = Math.max(0, (weapon.ammo || 0) - load);
+  player.reloading = false;
+  player.reloadEndAt = 0;
+  player.reloadWeapon = null;
+  sendToPlayer(playerId, { type: 'reloadComplete', playerId, weapon: wname, weapons: player.weapons });
+}
+
+function applyShopPurchase(player, playerId, itemId) {
+  const item = SHOP_ITEMS[itemId];
+  if (!item) return sendToPlayer(playerId, { type: 'shopResult', ok: false, message: 'Unknown item' });
+  if ((player.coins || 0) < item.cost) return sendToPlayer(playerId, { type: 'shopResult', ok: false, message: 'Not enough coins' });
+  if (!player.perksOwned) player.perksOwned = {};
+
+  if (item.type === 'perk' && player.perksOwned[item.perk]) {
+    return sendToPlayer(playerId, { type: 'shopResult', ok: false, message: 'Already owned' });
+  }
+  player.coins -= item.cost;
+  if (item.type === 'unlockWeapon') {
+    const w = player.weapons[item.weapon];
+    if (!w) return sendToPlayer(playerId, { type: 'shopResult', ok: false, message: 'Unavailable weapon' });
+    w.unlocked = true;
+    if ((w.ammo || 0) <= 0) {
+      w.ammo = Math.max(0, Math.floor((w.maxAmmo || 0) * 0.5));
+      const load = Math.min(w.magazineSize || 0, w.ammo);
+      w.ammoInClip = load;
+      w.ammo -= load;
+    }
+  } else if (item.type === 'ammo') {
+    const w = player.weapons[item.weapon];
+    if (!w || w.maxAmmo === Infinity) return sendToPlayer(playerId, { type: 'shopResult', ok: false, message: 'Ammo not available' });
+    w.ammo = Math.min(w.maxAmmo, (w.ammo || 0) + item.amount);
+  } else if (item.type === 'heal') {
+    player.health = Math.min(getPlayerMaxHealth(player), player.health + item.amount);
+  } else if (item.type === 'armor') {
+    player.armor = Math.min(100, (player.armor || 0) + item.amount);
+  } else if (item.type === 'perk') {
+    player.perksOwned[item.perk] = true;
+    if (item.perk === 'perk_speed') player.speedMult = Math.min(1.8, (player.speedMult || 1) * 1.08);
+    if (item.perk === 'perk_reload') player.reloadMult = Math.max(0.4, (player.reloadMult || 1) * 0.9);
+    if (item.perk === 'perk_crit') player.critChance = Math.min(0.5, (player.critChance || 0) + 0.05);
+  }
+  sendToPlayer(playerId, {
+    type: 'shopResult',
+    ok: true,
+    itemId,
+    message: 'Purchased: ' + itemId,
+    coins: player.coins,
+    weapons: player.weapons,
+    health: player.health,
+    armor: player.armor || 0,
+    perks: player.perksOwned,
+  });
+}
+
 // ─── Wave System ─────────────────────────────────────────────────────────────
 function getWaveConfig(wave) {
+  const botScale = Math.max(0, Math.min(20, matchConfig.bots || 6)) / 6;
   const isBoss = wave % 5 === 0;
   if (isBoss) {
     return [
       { type: 'boss',   count: 1 },
-      { type: 'zombie', count: 6 },
-      { type: 'runner', count: wave >= 10 ? 4 : 0 },
+      { type: 'zombie', count: Math.round(6 * botScale) },
+      { type: 'runner', count: wave >= 10 ? Math.round(4 * botScale) : 0 },
     ];
   }
   return [
-    { type: 'zombie',  count: 4 + wave * 2 },
-    { type: 'runner',  count: wave >= 3  ? Math.floor(wave * 0.8)  : 0 },
-    { type: 'shooter', count: wave >= 4  ? Math.floor(wave * 0.5)  : 0 },
-    { type: 'tank',    count: wave >= 6  ? Math.floor(wave / 4)    : 0 },
+    { type: 'zombie',  count: Math.round((4 + wave * 2) * botScale) },
+    { type: 'runner',  count: wave >= 3  ? Math.round(Math.floor(wave * 0.8)  * botScale) : 0 },
+    { type: 'shooter', count: wave >= 4  ? Math.round(Math.floor(wave * 0.5)  * botScale) : 0 },
+    { type: 'tank',    count: wave >= 6  ? Math.round(Math.floor(wave / 4)    * botScale) : 0 },
   ];
 }
 
 function spawnEnemy(type) {
   const stats = ENEMY_STATS[type];
+  const diff = DIFFICULTY_MULT[matchConfig.difficulty] || DIFFICULTY_MULT.normal;
   // Scale HP and damage by +WAVE_DIFFICULTY_SCALE per wave for progressive difficulty
   const scale = 1 + (waveState.wave - 1) * WAVE_DIFFICULTY_SCALE;
   const pos = getEnemySpawn();
@@ -339,9 +469,9 @@ function spawnEnemy(type) {
     id, type,
     x: pos.x, y: pos.y,
     angle: 0,
-    hp:    Math.floor(stats.hp    * scale),
-    maxHp: Math.floor(stats.hp    * scale),
-    damage:Math.floor(stats.damage * scale),
+    hp:    Math.floor(stats.hp    * scale * diff.enemyHp),
+    maxHp: Math.floor(stats.hp    * scale * diff.enemyHp),
+    damage:Math.floor(stats.damage * scale * diff.enemyDmg),
     speed: stats.speed,
     attackRange:   stats.attackRange,
     attackCooldown:stats.attackCooldown,
@@ -379,7 +509,7 @@ setInterval(() => {
   const active = getActivePlayers();
 
   // ── Wave management ─────────────────────────────────────────────────────────
-  if (active.length > 0) {
+  if (active.length > 0 && matchConfig.mode === 'survival') {
     if (waveState.state === 'prep' && now >= waveState.prepEndTime) {
       startWave(waveState.wave + 1);
 
@@ -412,9 +542,11 @@ setInterval(() => {
         }
       }, WAVE_TRANSITION_DELAY);
     }
-  } else if (active.length === 0 && waveState.state === 'active' && waveState.wave > 0) {
+  } else if (active.length === 0 && waveState.state === 'active' && waveState.wave > 0 && matchConfig.mode === 'survival') {
     // No active players — pause wave timer
     waveState.prepEndTime = now + 3000;
+  } else if (matchConfig.mode !== 'survival' && enemies.size > 0) {
+    enemies.clear();
   }
 
   // ── Player bullets ──────────────────────────────────────────────────────────
@@ -433,6 +565,8 @@ setInterval(() => {
     let hit = false;
     for (const [pid, player] of players) {
       if (pid === bullet.ownerId || player.dead) continue;
+      const shooter = players.get(bullet.ownerId);
+      if (shooter && matchConfig.mode === 'tdm' && !matchConfig.friendlyFire && sameTeam(shooter, player)) continue;
       const dx = player.x - bullet.x, dy = player.y - bullet.y;
       if (dx * dx + dy * dy < (PLAYER_RADIUS + 5) ** 2) {
         applyDamageToPlayer(player, pid, bullet.damage, bullet.ownerId, now);
@@ -589,14 +723,11 @@ setInterval(() => {
     }
   }
 
-  // ── Respawn players ─────────────────────────────────────────────────────────
+  // Respawn is manual via respawnRequest
+
   for (const [pid, player] of players) {
-    if (player.dead && now - player.deathTime > RESPAWN_DELAY) {
-      const sp = getRandomSpawn();
-      player.x = sp.x; player.y = sp.y;
-      player.health = MAX_HEALTH;
-      player.dead = false; player.deathTime = 0;
-      broadcast({ type: 'respawn', playerId: pid, x: player.x, y: player.y });
+    if (player.reloading && player.reloadEndAt > 0 && now >= player.reloadEndAt) {
+      completeReload(player, pid);
     }
   }
 
@@ -604,6 +735,24 @@ setInterval(() => {
   for (const [, player] of players) {
     if (player.activePowerUps && player.activePowerUps.length > 0) {
       player.activePowerUps = player.activePowerUps.filter(p => p.expiresAt > now);
+    }
+  }
+
+  if (matchConfig.mode !== 'survival') {
+    const elapsedMs = now - (matchConfig.roundStartedAt || now);
+    const timeLimitMs = Math.max(2, matchConfig.roundTimeMin || 8) * 60 * 1000;
+    let winner = null;
+    if (elapsedMs >= timeLimitMs) {
+      winner = [...players.values()].sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+    } else {
+      winner = [...players.values()].find(p => (p.kills || 0) >= (matchConfig.fragLimit || 25));
+    }
+    if (winner) {
+      broadcast({ type: 'matchEnded', message: `${winner.name} wins the round!` });
+      matchConfig.roundStartedAt = now;
+      for (const [, p] of players) {
+        p.kills = 0; p.deaths = 0; p.score = 0; p.killstreak = 0;
+      }
     }
   }
 
@@ -615,6 +764,8 @@ setInterval(() => {
       health: p.health, kills: p.kills, deaths: p.deaths, score: p.score,
       name: p.name, color: p.color, dead: p.dead, lastInput: p.lastInput,
       xp: p.xp || 0, level: p.level || 0, coins: p.coins || 0,
+      armor: p.armor || 0, killstreak: p.killstreak || 0, team: p.team || 'solo',
+      maxHealth: getPlayerMaxHealth(p),
       currentWeapon: p.currentWeapon,
       weapons: p.weapons,
       activePowerUps: p.activePowerUps || [],
@@ -654,6 +805,9 @@ setInterval(() => {
     waveCountdown: (waveState.state === 'prep')
       ? Math.max(0, Math.ceil((waveState.prepEndTime - now) / 1000))
       : 0,
+    mode: matchConfig.mode,
+    difficulty: matchConfig.difficulty,
+    friendlyFire: matchConfig.friendlyFire,
   });
 }, 1000 / TICK_RATE);
 
@@ -701,6 +855,15 @@ wss.on('connection', (ws) => {
           const MAX_SAVED_COINS = 100000;
           const savedXP    = (typeof msg.savedXP    === 'number' && msg.savedXP    >= 0) ? Math.min(msg.savedXP,    MAX_SAVED_XP)    : 0;
           const savedCoins = (typeof msg.savedCoins === 'number' && msg.savedCoins >= 0) ? Math.min(msg.savedCoins, MAX_SAVED_COINS) : 0;
+          if (msg.settings && typeof msg.settings === 'object' && players.size === 0) {
+            matchConfig.mode = ['survival', 'deathmatch', 'tdm'].includes(msg.settings.mode) ? msg.settings.mode : 'survival';
+            matchConfig.difficulty = DIFFICULTY_MULT[msg.settings.difficulty] ? msg.settings.difficulty : 'normal';
+            matchConfig.friendlyFire = !!msg.settings.friendlyFire;
+            matchConfig.bots = Math.max(0, Math.min(20, Math.floor(msg.settings.bots || 6)));
+            matchConfig.fragLimit = Math.max(5, Math.min(100, Math.floor(msg.settings.fragLimit || 25)));
+            matchConfig.roundTimeMin = Math.max(2, Math.min(30, Math.floor(msg.settings.roundTimeMin || 8)));
+            matchConfig.roundStartedAt = now;
+          }
 
           const player = {
             id: playerId,
@@ -714,19 +877,32 @@ wss.on('connection', (ws) => {
             level: calculateLevel(savedXP),
             skillPoints: 0,
             coins: savedCoins,
+            armor: 0,
+            killstreak: 0,
+            team: matchConfig.mode === 'tdm' ? (players.size % 2 === 0 ? 'alpha' : 'bravo') : 'solo',
             currentWeapon: 'pistol',
             weapons: {
-              pistol:  { ammo: Infinity, maxAmmo: Infinity },
-              shotgun: { ammo: 0, maxAmmo: 48 },
-              smg:     { ammo: 0, maxAmmo: 120 },
-              sniper:  { ammo: 0, maxAmmo: 15 },
+              pistol:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: Infinity, magazineSize: Infinity, reloadMs: 0, unlocked: true },
+              shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
+              smg:     { ammo: 0, maxAmmo: 120, ammoInClip: 0, magazineSize: 30, reloadMs: 1500, unlocked: false },
+              sniper:  { ammo: 0, maxAmmo: 15, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },
             },
             activePowerUps: [],
             lastShot: 0,
             // Client-sent skill bonuses (validated server-side)
             damageMult: 1.0,
             speedMult:  1.0,
+            reloadMult: 1.0,
+            critChance: 0,
+            damageTakenMult: (DIFFICULTY_MULT[matchConfig.difficulty] || DIFFICULTY_MULT.normal).playerDmgTaken,
+            maxHealthBonus: 0,
+            perksOwned: {},
+            reloading: false,
+            reloadEndAt: 0,
+            reloadWeapon: null,
           };
+          if (player.team === 'alpha') player.color = '#3b82f6';
+          if (player.team === 'bravo') player.color = '#ef4444';
 
           // Apply client skills (validate total skill points against level)
           if (msg.skills && typeof msg.skills === 'object') {
@@ -739,8 +915,14 @@ wss.on('connection', (ws) => {
             if (totalSpent <= lvl) {
               player.damageMult = 1 + dmgPts * 0.10;
               player.speedMult  = 1 + spdPts * 0.10;
+              player.maxHealthBonus = hpPts * 20;
               player.health = MAX_HEALTH + hpPts * 20;
             }
+          }
+          if (msg.perks && typeof msg.perks === 'object') {
+            if (msg.perks.perk_speed) { player.perksOwned.perk_speed = true; player.speedMult = Math.min(1.8, player.speedMult * 1.08); }
+            if (msg.perks.perk_reload) { player.perksOwned.perk_reload = true; player.reloadMult = Math.max(0.4, player.reloadMult * 0.9); }
+            if (msg.perks.perk_crit) { player.perksOwned.perk_crit = true; player.critChance = Math.min(0.5, player.critChance + 0.05); }
           }
 
           players.set(playerId, player);
@@ -790,24 +972,25 @@ wss.on('connection', (ws) => {
           const wdef  = WEAPONS[wname] || WEAPONS.pistol;
           const pwpn  = player.weapons[wname];
 
-          // Check ammo
           const shootTime = Date.now();
+          if (shootTime - (player.lastShot || 0) < wdef.baseCooldown) break;
+          if (player.reloading && player.reloadEndAt > shootTime) break;
           const hasInfiniteAmmo = player.activePowerUps &&
             player.activePowerUps.some(p => p.type === 'infiniteAmmo');
-          if (!wdef.infiniteAmmo && !hasInfiniteAmmo && pwpn && pwpn.ammo <= 0) {
+          if (!wdef.infiniteAmmo && !hasInfiniteAmmo && pwpn && (pwpn.ammoInClip || 0) <= 0) {
             player.currentWeapon = 'pistol';
             break;
           }
 
           let dmg = Math.round(wdef.damage * (player.damageMult || 1));
+          if (player.critChance && Math.random() < player.critChance) dmg = Math.round(dmg * 1.5);
           if (player.activePowerUps && player.activePowerUps.some(p => p.type === 'doubleDamage')) dmg *= 2;
 
           const bulletCount = (player.activePowerUps && player.activePowerUps.some(p => p.type === 'multiShot'))
             ? wdef.bulletCount + 2
             : wdef.bulletCount;
 
-          // Consume ammo
-          if (!wdef.infiniteAmmo && !hasInfiniteAmmo && pwpn) pwpn.ammo = Math.max(0, pwpn.ammo - 1);
+          if (!wdef.infiniteAmmo && !hasInfiniteAmmo && pwpn) pwpn.ammoInClip = Math.max(0, (pwpn.ammoInClip || 0) - 1);
 
           for (let i = 0; i < bulletCount; i++) {
             const spread = (Math.random() - 0.5) * wdef.spread;
@@ -822,6 +1005,7 @@ wss.on('connection', (ws) => {
               createdAt: shootTime,
             });
           }
+          player.lastShot = shootTime;
           break;
         }
 
@@ -832,7 +1016,9 @@ wss.on('connection', (ws) => {
           const wn = msg.weapon;
           if (WEAPONS[wn] && player.weapons[wn]) {
             const wpn = player.weapons[wn];
-            if (wn === 'pistol' || wpn.ammo > 0) {
+            if (wpn.unlocked !== false) {
+              player.reloading = false;
+              player.reloadEndAt = 0;
               player.currentWeapon = wn;
             }
           }
@@ -850,9 +1036,13 @@ wss.on('connection', (ws) => {
           if (!UNLOCKABLE_WEAPONS.includes(wn)) break;
           const cost = UNLOCK_COST[wn];
           const pwpn = player.weapons[wn];
-          if (cost && player.coins >= cost && pwpn && pwpn.ammo === 0) {
+          if (cost && player.coins >= cost && pwpn && !pwpn.unlocked) {
             player.coins -= cost;
+            pwpn.unlocked = true;
             pwpn.ammo = Math.floor(WEAPONS[wn].maxAmmo / 2);
+            const load = Math.min(pwpn.magazineSize || 0, pwpn.ammo || 0);
+            pwpn.ammoInClip = load;
+            pwpn.ammo -= load;
             sendToPlayer(player.id, {
               type: 'weaponUnlocked',
               weapon: wn,
@@ -860,6 +1050,46 @@ wss.on('connection', (ws) => {
               weapons: player.weapons,
             });
           }
+          break;
+        }
+
+        case 'reload': {
+          if (!connData.joined) return;
+          const player = players.get(connData.playerId);
+          if (!player || player.dead) return;
+          startReload(player, connData.playerId, Date.now());
+          break;
+        }
+
+        case 'shopBuy': {
+          if (!connData.joined) return;
+          const player = players.get(connData.playerId);
+          if (!player) return;
+          if (typeof msg.itemId !== 'string' || msg.itemId.length > 64) return;
+          applyShopPurchase(player, connData.playerId, msg.itemId);
+          break;
+        }
+
+        case 'respawnRequest': {
+          if (!connData.joined) return;
+          const player = players.get(connData.playerId);
+          if (!player || !player.dead) return;
+          const nowRespawn = Date.now();
+          if (nowRespawn - (player.deathTime || 0) < RESPAWN_DELAY) {
+            sendToPlayer(connData.playerId, {
+              type: 'shopResult',
+              ok: false,
+              message: `Respawn in ${((RESPAWN_DELAY - (nowRespawn - (player.deathTime || 0))) / 1000).toFixed(1)}s`,
+            });
+            return;
+          }
+          const sp = getRandomSpawn();
+          player.x = sp.x; player.y = sp.y;
+          player.health = getPlayerMaxHealth(player);
+          player.armor = 0;
+          player.dead = false; player.deathTime = 0;
+          player.reloading = false;
+          broadcast({ type: 'respawn', playerId: connData.playerId, x: player.x, y: player.y, health: player.health, armor: player.armor });
           break;
         }
       }

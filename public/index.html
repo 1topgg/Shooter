@@ -25,6 +25,12 @@
     <div id="coins-display">Coins: 0</div>
     <!-- Current weapon -->
     <div id="weapon-display">Pistol [INF]</div>
+    <div id="ammo-display">Ammo: ∞</div>
+    <div id="armor-display">Armor: 0</div>
+    <div id="reload-indicator" style="display:none;">
+      <span id="reload-text">Reloading...</span>
+      <div id="reload-bar-bg"><div id="reload-bar-fill"></div></div>
+    </div>
     <!-- Active power-ups -->
     <div id="powerups-display"></div>
     <!-- Skills button -->
@@ -39,7 +45,9 @@
       <span id="kills-display">Kills: 0</span>
       <span id="deaths-display">Deaths: 0</span>
       <span id="score-display">Score: 0</span>
+      <span id="killstreak-display">Streak: 0</span>
     </div>
+    <div id="leaderboard-mini"></div>
     <div id="kill-feed"></div>
     <div id="minimap"><canvas id="minimap-canvas" width="160" height="160"></canvas></div>
     <div id="player-count">Players: <span id="pcount">0</span></div>
@@ -49,6 +57,13 @@
       <div class="ws-slot" data-key="2">2<br><span>Shotgun</span></div>
       <div class="ws-slot" data-key="3">3<br><span>SMG</span></div>
       <div class="ws-slot" data-key="4">4<br><span>Sniper</span></div>
+    </div>
+
+    <div id="scoreboard" style="display:none;">
+      <div class="scoreboard-inner">
+        <h3>Scoreboard</h3>
+        <div id="scoreboard-list"></div>
+      </div>
     </div>
   </div>
 
@@ -74,6 +89,29 @@
         <h2>Skills</h2>
         <button onclick="toggleSkillsPanel()">✕</button>
       </div>
+
+      <div id="shop-panel" style="display:none;">
+        <div id="shop-inner">
+          <div class="panel-header">
+            <h2>Магазин / Shop</h2>
+            <button id="shop-close-btn" type="button">✕</button>
+          </div>
+          <p id="shop-coins-line">Coins: 0</p>
+          <div id="shop-categories"></div>
+          <div id="shop-items"></div>
+        </div>
+      </div>
+
+      <div id="pause-panel" style="display:none;">
+        <div class="screen-box">
+          <h1>⏸ PAUSE</h1>
+          <div class="pause-actions">
+            <button id="resume-btn" type="button">Resume</button>
+            <button id="pause-shop-btn" type="button">Shop</button>
+            <button id="pause-main-btn" type="button">Main Menu</button>
+          </div>
+        </div>
+      </div>
       <div id="skills-tree"></div>
     </div>
   </div>
@@ -83,6 +121,39 @@
     <div class="screen-box">
       <h1>☠ SHOOTER PvE</h1>
       <p class="subtitle">Top-down shooter with AI enemies</p>
+      <div id="mode-select">
+        <h3>Mode Select</h3>
+        <label>Mode
+          <select id="mode-select-input">
+            <option value="survival">Survival / Waves</option>
+            <option value="deathmatch">Deathmatch (FFA)</option>
+            <option value="tdm">Team Deathmatch</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select id="difficulty-input">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+            <option value="insane">Insane</option>
+          </select>
+        </label>
+        <label>Friendly Fire
+          <select id="friendly-fire-input">
+            <option value="off" selected>OFF</option>
+            <option value="on">ON</option>
+          </select>
+        </label>
+        <label>Bots
+          <input id="bots-input" type="number" min="0" max="20" value="6" />
+        </label>
+        <label>Frag limit
+          <input id="frag-limit-input" type="number" min="5" max="100" value="25" />
+        </label>
+        <label>Round time (min)
+          <input id="round-time-input" type="number" min="2" max="30" value="8" />
+        </label>
+      </div>
       <div class="controls-info">
         <div><kbd>W A S D</kbd> — move</div>
         <div><kbd>Mouse</kbd> — aim</div>
@@ -90,9 +161,17 @@
         <div><kbd>Space</kbd> — dash</div>
         <div><kbd>Shift</kbd> — sprint</div>
         <div><kbd>1-4</kbd> — switch weapon</div>
+        <div><kbd>Q</kbd> — prev weapon</div>
+        <div><kbd>R</kbd> — reload</div>
+        <div><kbd>Esc</kbd> — pause</div>
+        <div><kbd>Tab</kbd> — scoreboard</div>
+        <div><kbd>B</kbd> — shop</div>
         <div><kbd>K</kbd> — skills panel</div>
       </div>
       <input type="text" id="name-input" placeholder="Your name..." maxlength="16" autocomplete="off" />
+      <div class="start-actions">
+        <button id="open-shop-btn" type="button">Open Shop</button>
+      </div>
       <button id="play-btn" disabled>Connecting...</button>
       <p id="status-text" class="status connecting">Connecting to server...</p>
     </div>
@@ -102,7 +181,24 @@
   <div id="death-screen" style="display:none;">
     <div class="screen-box">
       <h1>💀 YOU DIED</h1>
-      <p id="death-info">Respawning...</p>
+      <p id="death-info">Killed in action</p>
+      <div id="death-actions">
+        <button id="respawn-btn" type="button">Respawn</button>
+        <button id="spectate-btn" type="button">Spectate</button>
+        <button id="death-main-btn" type="button">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobile-controls" style="display:none;">
+    <div id="left-stick">
+      <div id="left-stick-knob"></div>
+    </div>
+    <div id="mobile-actions">
+      <button id="mobile-fire-btn" type="button">Fire</button>
+      <button id="mobile-reload-btn" type="button">R</button>
+      <button id="mobile-switch-btn" type="button">↺</button>
+      <button id="mobile-pause-btn" type="button">☰</button>
     </div>
   </div>
 
