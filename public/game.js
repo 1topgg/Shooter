@@ -94,7 +94,7 @@ const POWERUP_LABELS = {
 };
 const WEAPON_NAMES     = { pistol: 'Pistol', shotgun: 'Shotgun', smg: 'SMG', sniper: 'Sniper' };
 const WEAPON_COLORS    = { pistol: '#94a3b8', shotgun: '#f97316', smg: '#22d3ee', sniper: '#a78bfa' };
-const WEAPON_AMMO_INF  = { pistol: true, shotgun: false, smg: false, sniper: false };
+const WEAPON_AMMO_INF  = { pistol: true, shotgun: true, smg: true, sniper: true };
 const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
 const WEAPON_ORDER = ['pistol', 'shotgun', 'smg', 'sniper'];
 const SHOP_CATALOG = [
@@ -195,10 +195,10 @@ let isPaused = false, isSpectating = false, isShopOpen = false, isScoreboardOpen
 let currentWeapon = 'pistol';
 let previousWeapon = null;
 let playerWeapons = {
-  pistol:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: Infinity, magazineSize: Infinity, reloadMs: 0, unlocked: true },
-  shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
-  smg:     { ammo: 0, maxAmmo: 120, ammoInClip: 0, magazineSize: 30, reloadMs: 1500, unlocked: false },
-  sniper:  { ammo: 0, maxAmmo: 15, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },
+  pistol:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 25, magazineSize: 25, reloadMs: 800, unlocked: true },
+  shotgun: { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 8, magazineSize: 8, reloadMs: 1200, unlocked: false },
+  smg:     { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 30, magazineSize: 30, reloadMs: 1000, unlocked: false },
+  sniper:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 5, magazineSize: 5, reloadMs: 1800, unlocked: false },
 };
 let activePowerUps = [], waveNumber = 0, waveStateStr = 'prep', waveCountdown = 5, waveEnemiesLeft = 0;
 let currentMode = 'survival';
