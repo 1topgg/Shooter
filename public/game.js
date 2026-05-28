@@ -23,11 +23,45 @@ const levelBadge = document.getElementById('level-badge');
 const waveDisplay = document.getElementById('wave-display');
 const coinsDisplay = document.getElementById('coins-display');
 const weaponDisplay = document.getElementById('weapon-display');
+const ammoDisplay = document.getElementById('ammo-display');
+const armorDisplay = document.getElementById('armor-display');
+const reloadIndicator = document.getElementById('reload-indicator');
+const reloadText = document.getElementById('reload-text');
+const reloadBarFill = document.getElementById('reload-bar-fill');
 const powerupsDisplay = document.getElementById('powerups-display');
 const waveAnnouncement = document.getElementById('wave-announcement');
 const levelupPopup = document.getElementById('levelup-popup');
 const skillsBtn = document.getElementById('skills-btn');
 const skillsPanel = document.getElementById('skills-panel');
+const killstreakDisplay = document.getElementById('killstreak-display');
+const leaderboardMini = document.getElementById('leaderboard-mini');
+const scoreboard = document.getElementById('scoreboard');
+const scoreboardList = document.getElementById('scoreboard-list');
+const shopPanel = document.getElementById('shop-panel');
+const shopCloseBtn = document.getElementById('shop-close-btn');
+const shopCoinsLine = document.getElementById('shop-coins-line');
+const shopCategoriesEl = document.getElementById('shop-categories');
+const shopItemsEl = document.getElementById('shop-items');
+const openShopBtn = document.getElementById('open-shop-btn');
+const pausePanel = document.getElementById('pause-panel');
+const resumeBtn = document.getElementById('resume-btn');
+const pauseShopBtn = document.getElementById('pause-shop-btn');
+const pauseMainBtn = document.getElementById('pause-main-btn');
+const respawnBtn = document.getElementById('respawn-btn');
+const spectateBtn = document.getElementById('spectate-btn');
+const deathMainBtn = document.getElementById('death-main-btn');
+const modeSelectInput = document.getElementById('mode-select-input');
+const difficultyInput = document.getElementById('difficulty-input');
+const friendlyFireInput = document.getElementById('friendly-fire-input');
+const botsInput = document.getElementById('bots-input');
+const fragLimitInput = document.getElementById('frag-limit-input');
+const roundTimeInput = document.getElementById('round-time-input');
+const leftStick = document.getElementById('left-stick');
+const leftStickKnob = document.getElementById('left-stick-knob');
+const mobileFireBtn = document.getElementById('mobile-fire-btn');
+const mobileReloadBtn = document.getElementById('mobile-reload-btn');
+const mobileSwitchBtn = document.getElementById('mobile-switch-btn');
+const mobilePauseBtn = document.getElementById('mobile-pause-btn');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const PLAYER_RADIUS = 18;
@@ -62,6 +96,26 @@ const WEAPON_NAMES     = { pistol: 'Pistol', shotgun: 'Shotgun', smg: 'SMG', sni
 const WEAPON_COLORS    = { pistol: '#94a3b8', shotgun: '#f97316', smg: '#22d3ee', sniper: '#a78bfa' };
 const WEAPON_AMMO_INF  = { pistol: true, shotgun: false, smg: false, sniper: false };
 const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
+const WEAPON_ORDER = ['pistol', 'shotgun', 'smg', 'sniper'];
+const SHOP_CATALOG = [
+  { id: 'unlock_shotgun', category: 'weapons', name: 'Shotgun', cost: 400, desc: 'Unlock shotgun.' },
+  { id: 'unlock_smg', category: 'weapons', name: 'SMG', cost: 600, desc: 'Unlock SMG.' },
+  { id: 'unlock_sniper', category: 'weapons', name: 'Sniper', cost: 900, desc: 'Unlock sniper rifle.' },
+  { id: 'ammo_shotgun', category: 'ammo', name: 'Shotgun ammo', cost: 120, desc: '+24 shells.' },
+  { id: 'ammo_smg', category: 'ammo', name: 'SMG ammo', cost: 120, desc: '+60 bullets.' },
+  { id: 'ammo_sniper', category: 'ammo', name: 'Sniper ammo', cost: 150, desc: '+8 rounds.' },
+  { id: 'medkit', category: 'survival', name: 'Medkit', cost: 120, desc: '+45 HP instantly.' },
+  { id: 'armor_small', category: 'survival', name: 'Armor plate', cost: 160, desc: '+25 armor.' },
+  { id: 'perk_speed', category: 'perks', name: 'Speed perk', cost: 320, desc: '+8% movement speed.' },
+  { id: 'perk_reload', category: 'perks', name: 'Reload perk', cost: 300, desc: '-10% reload time.' },
+  { id: 'perk_crit', category: 'perks', name: 'Crit perk', cost: 380, desc: '+5% crit chance.' },
+];
+const SHOP_CATEGORIES = [
+  { id: 'weapons', label: 'Weapons' },
+  { id: 'ammo', label: 'Ammo' },
+  { id: 'survival', label: 'Armor/Heal' },
+  { id: 'perks', label: 'Perks' },
+];
 
 // ─── Save System ─────────────────────────────────────────────────────────────
 const SAVE_KEY = 'shooter_save_v2';
@@ -81,6 +135,13 @@ function loadSave() {
         if (typeof v === 'number' && isFinite(v)) safe.skills[k] = Math.max(0, Math.min(10, Math.floor(v)));
       }
     }
+    if (typeof raw.mode === 'string') safe.mode = raw.mode;
+    if (typeof raw.difficulty === 'string') safe.difficulty = raw.difficulty;
+    if (typeof raw.friendlyFire === 'boolean') safe.friendlyFire = raw.friendlyFire;
+    if (typeof raw.bots === 'number' && isFinite(raw.bots)) safe.bots = Math.max(0, Math.min(20, Math.floor(raw.bots)));
+    if (typeof raw.fragLimit === 'number' && isFinite(raw.fragLimit)) safe.fragLimit = Math.max(5, Math.min(100, Math.floor(raw.fragLimit)));
+    if (typeof raw.roundTimeMin === 'number' && isFinite(raw.roundTimeMin)) safe.roundTimeMin = Math.max(2, Math.min(30, Math.floor(raw.roundTimeMin)));
+    if (raw.shopOwned && typeof raw.shopOwned === 'object') safe.shopOwned = raw.shopOwned;
     return safe;
   } catch (_) { return {}; }
 }
@@ -107,11 +168,16 @@ const skills = Object.assign(
 let skillPoints = save.skillPoints || 0;
 
 function getSkillBonus(key) { const d = SKILL_DEFS[key]; return d ? Math.min(skills[key] || 0, d.max) : 0; }
-function playerSpeedMult() { return 1 + getSkillBonus('speed') * 0.10; }
+function playerSpeedMult() {
+  let mult = 1 + getSkillBonus('speed') * 0.10;
+  if (shopOwned.perk_speed) mult *= 1.08;
+  return mult;
+}
 function playerMaxHp()     { return 100 + getSkillBonus('maxHp') * 20; }
 function getDashCooldown() { return getSkillBonus('dash') > 0 ? 1000 : DASH_COOLDOWN; }
 function getShootCooldown(wpn) {
-  const reduction = getSkillBonus('reload') * 0.15;
+  let reduction = getSkillBonus('reload') * 0.15;
+  if (shopOwned.perk_reload) reduction += 0.1;
   const base = WEAPON_COOLDOWNS[wpn || currentWeapon] || SHOOT_COOLDOWN;
   return Math.max(50, base * (1 - reduction));
 }
@@ -125,16 +191,34 @@ let particles = [], killFeed = [], damageNumbers = [];
 let localPlayer = null, pendingInputs = [], inputSeq = 0;
 let lastSendTime = 0, lastShotTime = 0, lastDashTime = 0;
 let running = false, lastFrame = 0, isDead = false;
+let isPaused = false, isSpectating = false, isShopOpen = false, isScoreboardOpen = false;
 let currentWeapon = 'pistol';
+let previousWeapon = null;
 let playerWeapons = {
-  pistol:  { ammo: Infinity, maxAmmo: Infinity },
-  shotgun: { ammo: 0, maxAmmo: 48 },
-  smg:     { ammo: 0, maxAmmo: 120 },
-  sniper:  { ammo: 0, maxAmmo: 15 },
+  pistol:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: Infinity, magazineSize: Infinity, reloadMs: 0, unlocked: true },
+  shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
+  smg:     { ammo: 0, maxAmmo: 120, ammoInClip: 0, magazineSize: 30, reloadMs: 1500, unlocked: false },
+  sniper:  { ammo: 0, maxAmmo: 15, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },
 };
 let activePowerUps = [], waveNumber = 0, waveStateStr = 'prep', waveCountdown = 5, waveEnemiesLeft = 0;
+let currentMode = 'survival';
 let xp = save.xp || 0, level = Math.floor(Math.sqrt(xp / 100)), coins = save.coins || 0;
 let pendingSkillPoints = skillPoints, regenTimer = 0, screenShake = 0;
+let reloadEndAt = 0, reloadDuration = 0;
+let reloadRequested = false;
+let reloadRequestSentAt = 0;
+let selectedShopCategory = 'weapons';
+let matchSettings = {
+  mode: save.mode || 'survival',
+  difficulty: save.difficulty || 'normal',
+  friendlyFire: save.friendlyFire || false,
+  bots: save.bots || 6,
+  fragLimit: save.fragLimit || 25,
+  roundTimeMin: save.roundTimeMin || 8
+};
+let shopOwned = Object.assign({}, save.shopOwned || {});
+const isMobile = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const mobileStick = { active: false, id: null, startX: 0, startY: 0, x: 0, y: 0 };
 
 // ─── Canvas Setup ────────────────────────────────────────────────────────────
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
@@ -173,17 +257,29 @@ function handleMessage(msg) {
 
     case 'joined':
       localId = msg.playerId; worldW = msg.worldWidth; worldH = msg.worldHeight;
-      localPlayer = { x: msg.player.x, y: msg.player.y, angle: 0, health: msg.player.health, kills: 0, deaths: 0, score: 0 };
+      localPlayer = {
+        x: msg.player.x, y: msg.player.y, angle: 0, health: msg.player.health,
+        kills: 0, deaths: 0, score: 0, armor: msg.player.armor || 0, killstreak: 0
+      };
+      if (msg.player.weapons) playerWeapons = msg.player.weapons;
+      currentWeapon = msg.player.currentWeapon || 'pistol';
+      if (msg.player.coins !== undefined) coins = msg.player.coins;
       if (msg.killFeed) killFeed = msg.killFeed.map(k => ({ ...k, fadeTime: Date.now() + 8000 }));
       waveNumber = msg.wave || 0; waveStateStr = msg.waveState || 'prep'; waveCountdown = msg.waveCountdown || 5;
       joined = true; isDead = false; running = true; lastFrame = performance.now();
       startScreen.style.display = 'none'; deathScreen.style.display = 'none'; hud.style.display = 'block';
+      if (isMobile) document.getElementById('mobile-controls').style.display = 'block';
       requestAnimationFrame(loop);
       break;
 
     case 'state': applyState(msg); break;
 
-    case 'hit': spawnParticles(msg.x, msg.y, '#ff6b6b', 8, 180); screenShake = Math.max(screenShake, 5); break;
+    case 'hit':
+      spawnParticles(msg.x, msg.y, '#ff6b6b', 8, 180);
+      if (msg.damage) spawnDmgNum(msg.x, msg.y, '-' + msg.damage, '#f87171');
+      screenShake = Math.max(screenShake, 5);
+      if (msg.playerId === localId && navigator.vibrate && isMobile) navigator.vibrate(30);
+      break;
 
     case 'kill':
       addKillFeed(msg.killerName, msg.victimName);
@@ -191,8 +287,9 @@ function handleMessage(msg) {
 
     case 'respawn':
       if (msg.playerId === localId && localPlayer) {
-        localPlayer.x = msg.x; localPlayer.y = msg.y; localPlayer.health = 100;
-        isDead = false; deathScreen.style.display = 'none';
+        localPlayer.x = msg.x; localPlayer.y = msg.y; localPlayer.health = msg.health || 100;
+        localPlayer.armor = msg.armor || 0;
+        isDead = false; isSpectating = false; deathScreen.style.display = 'none';
       }
       spawnParticles(msg.x, msg.y, '#4ade80', 16, 200); break;
 
@@ -243,11 +340,56 @@ function handleMessage(msg) {
 
     case 'weaponUnlocked':
       if (msg.weapons) playerWeapons = msg.weapons;
-      coins = msg.coins; showNotification(WEAPON_NAMES[msg.weapon] + ' unlocked!'); persistProgress(); break;
+      coins = msg.coins;
+      if (msg.weapon) shopOwned['unlock_' + msg.weapon] = true;
+      showNotification(WEAPON_NAMES[msg.weapon] + ' unlocked!');
+      persistProgress();
+      break;
+
+    case 'reloadStart':
+      if (msg.playerId === localId) {
+        reloadDuration = msg.duration || 0;
+        reloadEndAt = Date.now() + reloadDuration;
+        reloadRequested = false;
+      }
+      break;
+
+    case 'reloadComplete':
+      if (msg.playerId === localId) {
+        if (msg.weapons) playerWeapons = msg.weapons;
+        reloadDuration = 0; reloadEndAt = 0;
+        reloadRequested = false;
+      }
+      break;
+
+    case 'shopResult':
+      if (msg.ok) {
+        if (msg.coins !== undefined) coins = msg.coins;
+        if (msg.weapons) playerWeapons = msg.weapons;
+        if (localPlayer && typeof msg.health === 'number') localPlayer.health = msg.health;
+        if (localPlayer && typeof msg.armor === 'number') localPlayer.armor = msg.armor;
+        if (msg.perks) shopOwned = { ...shopOwned, ...msg.perks };
+        if (msg.itemId && (msg.itemId.startsWith('unlock_') || msg.itemId.startsWith('perk_'))) shopOwned[msg.itemId] = true;
+        showNotification(msg.message || 'Purchased');
+        persistProgress();
+      } else {
+        showNotification(msg.message || 'Purchase failed');
+      }
+      renderShop();
+      break;
+
+    case 'matchEnded':
+      showNotification(msg.message || 'Match ended');
+      break;
+
+    case 'respawnRejected':
+      showNotification(msg.message || 'Respawn unavailable');
+      break;
   }
 }
 
 function applyState(msg) {
+  if (!joined) return;
   const newPlayers = new Map();
   for (const sp of msg.players) newPlayers.set(sp.id, sp);
   players = newPlayers; bullets = msg.bullets || []; enemyBullets = msg.enemyBullets || [];
@@ -256,11 +398,14 @@ function applyState(msg) {
   if (typeof msg.wave === 'number') waveNumber = msg.wave;
   if (typeof msg.waveCountdown === 'number') waveCountdown = msg.waveCountdown;
   if (typeof msg.waveEnemiesLeft === 'number') waveEnemiesLeft = msg.waveEnemiesLeft;
+  if (typeof msg.mode === 'string') currentMode = msg.mode;
   const myData = players.get(localId);
   if (!myData || !localPlayer) return;
   if (myData.dead && !isDead) onDeath('');
   localPlayer.health = myData.health; localPlayer.kills = myData.kills;
   localPlayer.deaths = myData.deaths; localPlayer.score = myData.score;
+  localPlayer.armor = myData.armor || 0;
+  localPlayer.killstreak = myData.killstreak || 0;
   if (myData.weapons) playerWeapons = myData.weapons;
   if (myData.currentWeapon) currentWeapon = myData.currentWeapon;
   if (myData.activePowerUps) activePowerUps = myData.activePowerUps;
@@ -278,13 +423,21 @@ function applyState(msg) {
 function startGame() {
   if (!connected) return;
   const name = nameInput.value.trim() || '';
-  send({ type: 'join', name, savedXP: xp, savedCoins: coins, skills: { ...skills } });
+  send({
+    type: 'join',
+    name,
+    savedXP: xp,
+    savedCoins: coins,
+    skills: { ...skills },
+    settings: { ...matchSettings },
+    perks: { ...shopOwned }
+  });
   playBtn.disabled = true; playBtn.textContent = 'Connecting...';
 }
 
 function onDeath(killerName) {
   isDead = true; deathScreen.style.display = 'flex';
-  deathInfo.textContent = killerName ? 'Killed by: ' + killerName : 'Respawning in 3s...';
+  deathInfo.textContent = killerName ? 'Killed by: ' + killerName : 'You died';
   if (localPlayer) spawnParticles(localPlayer.x, localPlayer.y, '#f97316', 30, 300);
   screenShake = 10;
 }
@@ -294,7 +447,15 @@ window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && localPlayer && !isDead) tryDash();
-  if (localPlayer && !isDead) {
+  if (e.code === 'KeyQ' && localPlayer && !isDead) switchToPreviousWeapon();
+  if (e.code === 'KeyR' && localPlayer && !isDead) requestReload();
+  if (e.code === 'Escape') {
+    if (isShopOpen) toggleShop(false);
+    else togglePause();
+  }
+  if (e.code === 'Tab') { e.preventDefault(); isScoreboardOpen = true; renderScoreboard(); }
+  if (e.code === 'KeyB') toggleShop();
+  if (localPlayer && !isDead && !isPaused) {
     if (e.code === 'Digit1') switchWeapon('pistol');
     if (e.code === 'Digit2') switchWeapon('shotgun');
     if (e.code === 'Digit3') switchWeapon('smg');
@@ -303,23 +464,207 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyK') toggleSkillsPanel();
   if (e.code === 'Escape' && skillsPanel) skillsPanel.style.display = 'none';
 });
-window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Tab') { isScoreboardOpen = false; if (scoreboard) scoreboard.style.display = 'none'; }
+});
 canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 canvas.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
 canvas.addEventListener('mouseup',   e => { if (e.button === 0) mouse.down = false; });
 canvas.addEventListener('mouseleave', () => { mouse.down = false; });
+canvas.addEventListener('touchstart', e => {
+  if (!isMobile) return;
+  const touch = Array.from(e.touches).find(t => t.clientX > window.innerWidth * 0.45);
+  if (touch) { mouse.x = touch.clientX; mouse.y = touch.clientY; }
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  if (!isMobile) return;
+  const touch = Array.from(e.touches).find(t => t.clientX > window.innerWidth * 0.45);
+  if (touch) { mouse.x = touch.clientX; mouse.y = touch.clientY; }
+}, { passive: false });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  if (isDead) return;
+  e.preventDefault();
+  cycleWeapon(e.deltaY > 0 ? 1 : -1);
+}, { passive: false });
 playBtn.addEventListener('click', startGame);
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') startGame(); });
 if (skillsBtn) skillsBtn.addEventListener('click', toggleSkillsPanel);
+if (openShopBtn) openShopBtn.addEventListener('click', () => toggleShop(true));
+if (shopCloseBtn) shopCloseBtn.addEventListener('click', () => toggleShop(false));
+if (resumeBtn) resumeBtn.addEventListener('click', () => togglePause(false));
+if (pauseShopBtn) pauseShopBtn.addEventListener('click', () => { togglePause(false); toggleShop(true); });
+if (pauseMainBtn) pauseMainBtn.addEventListener('click', returnToMainMenu);
+if (respawnBtn) respawnBtn.addEventListener('click', () => send({ type: 'respawnRequest' }));
+if (spectateBtn) spectateBtn.addEventListener('click', () => { isSpectating = true; deathInfo.textContent = 'Spectating mode'; });
+if (deathMainBtn) deathMainBtn.addEventListener('click', returnToMainMenu);
+if (mobileFireBtn) {
+  mobileFireBtn.addEventListener('touchstart', e => { e.preventDefault(); mouse.down = true; }, { passive: false });
+  mobileFireBtn.addEventListener('touchend', e => { e.preventDefault(); mouse.down = false; }, { passive: false });
+}
+if (mobileReloadBtn) mobileReloadBtn.addEventListener('touchstart', e => { e.preventDefault(); requestReload(); }, { passive: false });
+if (mobileSwitchBtn) mobileSwitchBtn.addEventListener('touchstart', e => { e.preventDefault(); cycleWeapon(1); }, { passive: false });
+if (mobilePauseBtn) mobilePauseBtn.addEventListener('touchstart', e => { e.preventDefault(); togglePause(); }, { passive: false });
+if (leftStick) {
+  leftStick.addEventListener('touchstart', onStickStart, { passive: false });
+  leftStick.addEventListener('touchmove', onStickMove, { passive: false });
+  leftStick.addEventListener('touchend', onStickEnd, { passive: false });
+  leftStick.addEventListener('touchcancel', onStickEnd, { passive: false });
+}
+if (modeSelectInput) modeSelectInput.value = matchSettings.mode;
+if (difficultyInput) difficultyInput.value = matchSettings.difficulty;
+if (friendlyFireInput) friendlyFireInput.value = matchSettings.friendlyFire ? 'on' : 'off';
+if (botsInput) botsInput.value = String(matchSettings.bots);
+if (fragLimitInput) fragLimitInput.value = String(matchSettings.fragLimit);
+if (roundTimeInput) roundTimeInput.value = String(matchSettings.roundTimeMin);
+for (const control of [modeSelectInput, difficultyInput, friendlyFireInput, botsInput, fragLimitInput, roundTimeInput]) {
+  if (!control) continue;
+  control.addEventListener('change', syncMatchSettingsFromUI);
+}
+if (shopPanel) shopPanel.addEventListener('click', e => { if (e.target === shopPanel) toggleShop(false); });
 
 function switchWeapon(name) {
-  if (currentWeapon === name) return;
+  if (currentWeapon === name || !playerWeapons[name] || playerWeapons[name].unlocked === false) return;
+  previousWeapon = currentWeapon;
   const wpn = playerWeapons[name];
-  if (!wpn) return;
-  if (name !== 'pistol' && (!wpn.ammo || wpn.ammo <= 0)) { showNotification(WEAPON_NAMES[name] + ': no ammo'); return; }
   currentWeapon = name;
+  reloadEndAt = 0;
+  reloadRequested = false;
   send({ type: 'switchWeapon', weapon: name });
+}
+
+function switchToPreviousWeapon() {
+  if (previousWeapon && previousWeapon !== currentWeapon) switchWeapon(previousWeapon);
+}
+
+function cycleWeapon(dir) {
+  const available = WEAPON_ORDER.filter(w => playerWeapons[w] && playerWeapons[w].unlocked !== false);
+  if (available.length < 2) return;
+  const idx = available.indexOf(currentWeapon);
+  const next = available[(idx + dir + available.length) % available.length];
+  switchWeapon(next);
+}
+
+function requestReload() {
+  if (!joined || !localPlayer || isDead) return;
+  if (reloadRequested || reloadEndAt > Date.now()) return;
+  reloadRequested = true;
+  reloadRequestSentAt = Date.now();
+  send({ type: 'reload' });
+}
+
+function togglePause(force) {
+  if (!joined || isDead) return;
+  isPaused = typeof force === 'boolean' ? force : !isPaused;
+  if (pausePanel) pausePanel.style.display = isPaused ? 'flex' : 'none';
+}
+
+function toggleShop(force) {
+  const open = typeof force === 'boolean' ? force : !isShopOpen;
+  isShopOpen = open;
+  if (shopPanel) shopPanel.style.display = open ? 'flex' : 'none';
+  if (open) renderShop();
+}
+
+function syncMatchSettingsFromUI() {
+  matchSettings = {
+    mode: modeSelectInput ? modeSelectInput.value : 'survival',
+    difficulty: difficultyInput ? difficultyInput.value : 'normal',
+    friendlyFire: friendlyFireInput ? friendlyFireInput.value === 'on' : false,
+    bots: botsInput ? Math.max(0, Math.min(20, Number(botsInput.value) || 0)) : 6,
+    fragLimit: fragLimitInput ? Math.max(5, Math.min(100, Number(fragLimitInput.value) || 25)) : 25,
+    roundTimeMin: roundTimeInput ? Math.max(2, Math.min(30, Number(roundTimeInput.value) || 8)) : 8
+  };
+  persistProgress();
+}
+
+function returnToMainMenu() {
+  running = false;
+  joined = false;
+  isDead = false;
+  isPaused = false;
+  isShopOpen = false;
+  if (pausePanel) pausePanel.style.display = 'none';
+  if (shopPanel) shopPanel.style.display = 'none';
+  if (hud) hud.style.display = 'none';
+  if (deathScreen) deathScreen.style.display = 'none';
+  if (startScreen) startScreen.style.display = 'flex';
+  if (playBtn) { playBtn.disabled = !connected; playBtn.textContent = connected ? 'PLAY' : 'Connecting...'; }
+  const mobileControls = document.getElementById('mobile-controls');
+  if (mobileControls) mobileControls.style.display = 'none';
+}
+
+function renderShop() {
+  if (!shopCategoriesEl || !shopItemsEl) return;
+  shopCoinsLine.textContent = 'Coins: ' + coins;
+  shopCategoriesEl.innerHTML = '';
+  for (const cat of SHOP_CATEGORIES) {
+    const b = document.createElement('button');
+    b.className = 'shop-cat-btn' + (selectedShopCategory === cat.id ? ' active' : '');
+    b.textContent = cat.label;
+    b.addEventListener('click', () => { selectedShopCategory = cat.id; renderShop(); });
+    shopCategoriesEl.appendChild(b);
+  }
+  const items = SHOP_CATALOG.filter(i => i.category === selectedShopCategory);
+  shopItemsEl.innerHTML = '';
+  for (const item of items) {
+    const card = document.createElement('div');
+    const owned = !!shopOwned[item.id] || (item.id.startsWith('unlock_') && playerWeapons[item.id.replace('unlock_', '')]?.unlocked);
+    card.className = 'shop-item' + (owned ? ' owned' : '') + (coins < item.cost && !owned ? ' locked' : '');
+    const title = document.createElement('h4'); title.textContent = item.name + ' • ' + item.cost + '$';
+    const desc = document.createElement('p'); desc.textContent = item.desc;
+    const btn = document.createElement('button');
+    btn.textContent = owned ? 'Owned' : 'Buy';
+    btn.disabled = owned || coins < item.cost;
+    btn.title = desc.textContent;
+    btn.addEventListener('click', () => send({ type: 'shopBuy', itemId: item.id }));
+    card.appendChild(title); card.appendChild(desc); card.appendChild(btn);
+    shopItemsEl.appendChild(card);
+  }
+}
+
+function renderScoreboard() {
+  if (!scoreboard || !scoreboardList) return;
+  if (!isScoreboardOpen) return;
+  scoreboard.style.display = 'flex';
+  const rows = [...players.values()].sort((a, b) => (b.score || 0) - (a.score || 0));
+  scoreboardList.innerHTML = rows.map(p =>
+    '<div class="scoreboard-row"><span>' + esc(p.name || 'Player') + '</span><span>K ' + (p.kills || 0) + '</span><span>D ' + (p.deaths || 0) + '</span><span>' + (p.score || 0) + '</span></div>'
+  ).join('');
+}
+
+function onStickStart(e) {
+  if (mobileStick.active) return;
+  const t = e.changedTouches[0];
+  mobileStick.active = true; mobileStick.id = t.identifier;
+  mobileStick.startX = t.clientX; mobileStick.startY = t.clientY;
+  mobileStick.x = 0; mobileStick.y = 0;
+  e.preventDefault();
+}
+function onStickMove(e) {
+  if (!mobileStick.active) return;
+  const t = Array.from(e.changedTouches).find(x => x.identifier === mobileStick.id);
+  if (!t) return;
+  const dx = t.clientX - mobileStick.startX;
+  const dy = t.clientY - mobileStick.startY;
+  const len = Math.hypot(dx, dy) || 1;
+  const max = 40;
+  mobileStick.x = (dx / len) * Math.min(max, len);
+  mobileStick.y = (dy / len) * Math.min(max, len);
+  if (leftStickKnob) {
+    leftStickKnob.style.left = (40 + mobileStick.x * 0.7) + 'px';
+    leftStickKnob.style.top = (40 + mobileStick.y * 0.7) + 'px';
+  }
+  e.preventDefault();
+}
+function onStickEnd(e) {
+  const t = Array.from(e.changedTouches).find(x => x.identifier === mobileStick.id);
+  if (!t) return;
+  mobileStick.active = false; mobileStick.id = null;
+  mobileStick.x = 0; mobileStick.y = 0;
+  if (leftStickKnob) { leftStickKnob.style.left = '40px'; leftStickKnob.style.top = '40px'; }
+  e.preventDefault();
 }
 
 // ─── Dash ─────────────────────────────────────────────────────────────────────
@@ -338,7 +683,7 @@ function tryDash() {
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 function update(dt) {
-  if (!localPlayer || isDead) return;
+  if (!localPlayer || isDead || isPaused || isShopOpen || isSpectating) return;
   const now = performance.now();
   localPlayer.angle = Math.atan2(camera.y + mouse.y - localPlayer.y, camera.x + mouse.x - localPlayer.x);
   let mx = 0, my = 0;
@@ -346,6 +691,10 @@ function update(dt) {
   if (keys['KeyS'] || keys['ArrowDown'])  my += 1;
   if (keys['KeyA'] || keys['ArrowLeft'])  mx -= 1;
   if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+  if (mobileStick.active) {
+    mx += mobileStick.x / 40;
+    my += mobileStick.y / 40;
+  }
   if (mx !== 0 || my !== 0) {
     const len = Math.hypot(mx, my);
     const hasSprint = keys['ShiftLeft'] || keys['ShiftRight'];
@@ -362,7 +711,7 @@ function update(dt) {
   }
   const shootCd = getShootCooldown(currentWeapon);
   const hasRapidFire = activePowerUps.some(p => p.type === 'rapidFire' && p.expiresAt > Date.now());
-  if (mouse.down && now - lastShotTime > (hasRapidFire ? shootCd / 2 : shootCd)) {
+  if (mouse.down && reloadEndAt <= Date.now() && now - lastShotTime > (hasRapidFire ? shootCd / 2 : shootCd)) {
     send({ type: 'shoot', angle: localPlayer.angle });
     lastShotTime = now;
     spawnParticles(
@@ -371,6 +720,9 @@ function update(dt) {
       '#fde047', 5, 120
     );
   }
+  const wpn = playerWeapons[currentWeapon];
+  if (wpn && wpn.ammoInClip === 0 && wpn.ammo > 0 && !reloadRequested && reloadEndAt <= Date.now()) requestReload();
+  if (reloadRequested && Date.now() - reloadRequestSentAt > 500) reloadRequested = false;
   if (getSkillBonus('regen') > 0) {
     regenTimer += dt;
     if (regenTimer >= 1) { regenTimer = 0; localPlayer.health = Math.min(playerMaxHp(), localPlayer.health + getSkillBonus('regen') * 0.5); }
@@ -416,6 +768,7 @@ function updateHUD() {
   killsDisplay.textContent  = 'Kills: '  + (localPlayer.kills  || 0);
   deathsDisplay.textContent = 'Deaths: ' + (localPlayer.deaths || 0);
   scoreDisplay.textContent  = 'Score: '  + (localPlayer.score  || 0);
+  if (killstreakDisplay) killstreakDisplay.textContent = 'Streak: ' + (localPlayer.killstreak || 0);
   const curLvl = Math.floor(Math.sqrt((xp || 0) / 100));
   const lvlXP  = curLvl * curLvl * 100, nextXP = (curLvl + 1) * (curLvl + 1) * 100;
   if (xpBarFill) xpBarFill.style.width = clamp(((xp - lvlXP) / (nextXP - lvlXP)) * 100, 0, 100) + '%';
@@ -425,15 +778,35 @@ function updateHUD() {
     levelBadge.style.color = curLvl >= 10 ? '#facc15' : curLvl >= 5 ? '#a78bfa' : '#38bdf8';
   }
   if (waveDisplay) {
-    if (waveStateStr === 'active') { waveDisplay.textContent = 'Wave ' + waveNumber + ' [' + waveEnemiesLeft + ']'; waveDisplay.style.color = '#f87171'; }
-    else { waveDisplay.textContent = 'Wave ' + (waveNumber + 1) + ' in ' + waveCountdown + 's'; waveDisplay.style.color = '#fbbf24'; }
+    if (currentMode !== 'survival') {
+      waveDisplay.textContent = currentMode === 'tdm' ? 'Team Deathmatch' : 'Deathmatch';
+      waveDisplay.style.color = '#38bdf8';
+    } else if (waveStateStr === 'active') {
+      waveDisplay.textContent = 'Wave ' + waveNumber + ' [' + waveEnemiesLeft + ']'; waveDisplay.style.color = '#f87171';
+    } else {
+      waveDisplay.textContent = 'Wave ' + (waveNumber + 1) + ' in ' + waveCountdown + 's'; waveDisplay.style.color = '#fbbf24';
+    }
   }
   if (coinsDisplay) coinsDisplay.textContent = 'Coins: ' + coins;
   if (weaponDisplay) {
     const wpn = playerWeapons[currentWeapon];
-    const ammoStr = (wpn && !WEAPON_AMMO_INF[currentWeapon]) ? ' [' + Math.max(0, wpn.ammo || 0) + ']' : ' [INF]';
+    const ammoStr = (wpn && !WEAPON_AMMO_INF[currentWeapon]) ? ' [' + Math.max(0, wpn.ammoInClip || 0) + '/' + Math.max(0, wpn.ammo || 0) + ']' : ' [INF]';
     weaponDisplay.textContent = (WEAPON_NAMES[currentWeapon] || currentWeapon) + ammoStr;
     weaponDisplay.style.color = WEAPON_COLORS[currentWeapon] || '#fff';
+    if (ammoDisplay) ammoDisplay.textContent = WEAPON_AMMO_INF[currentWeapon] ? 'Ammo: ∞' : 'Ammo: ' + Math.max(0, wpn.ammoInClip || 0) + ' / ' + Math.max(0, wpn.ammo || 0);
+  }
+  if (armorDisplay) armorDisplay.textContent = 'Armor: ' + Math.max(0, Math.round(localPlayer.armor || 0));
+  if (reloadIndicator && reloadBarFill && reloadText) {
+    if (reloadEndAt > Date.now()) {
+      const rem = Math.max(0, reloadEndAt - Date.now());
+      const progress = 100 - (rem / Math.max(1, reloadDuration)) * 100;
+      reloadIndicator.style.display = 'block';
+      reloadBarFill.style.width = clamp(progress, 0, 100) + '%';
+      reloadText.textContent = 'Reloading... ' + (rem / 1000).toFixed(1) + 's';
+    } else {
+      reloadIndicator.style.display = 'none';
+      reloadBarFill.style.width = '0%';
+    }
   }
   if (powerupsDisplay) {
     activePowerUps = activePowerUps.filter(p => p.expiresAt > Date.now());
@@ -446,6 +819,12 @@ function updateHUD() {
     }
   }
   if (skillsBtn) skillsBtn.textContent = pendingSkillPoints > 0 ? ('Skills (' + pendingSkillPoints + ')') : 'Skills [K]';
+  if (leaderboardMini) {
+    const top = [...players.values()].sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3);
+    leaderboardMini.innerHTML = '<div class="lb-title">Top-3</div>' +
+      top.map((p, i) => '<div class="lb-entry">' + (i + 1) + '. ' + esc(p.name || 'Player') + ' • ' + (p.score || 0) + '</div>').join('');
+  }
+  renderScoreboard();
 }
 
 // ─── Announcements ────────────────────────────────────────────────────────────
@@ -568,7 +947,18 @@ function renderKillFeed() {
   ).join('');
 }
 function esc(str) { const d = document.createElement('div'); d.textContent = String(str); return d.innerHTML; }
-function persistProgress() { writeSave({ xp, coins, skills: { ...skills }, skillPoints: pendingSkillPoints }); }
+function persistProgress() {
+  writeSave({
+    xp, coins, skills: { ...skills }, skillPoints: pendingSkillPoints,
+    mode: matchSettings.mode,
+    difficulty: matchSettings.difficulty,
+    friendlyFire: matchSettings.friendlyFire,
+    bots: matchSettings.bots,
+    fragLimit: matchSettings.fragLimit,
+    roundTimeMin: matchSettings.roundTimeMin,
+    shopOwned: { ...shopOwned }
+  });
+}
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 function render() {
@@ -668,10 +1058,18 @@ function drawPlayers() {
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Courier New"'; ctx.textAlign = 'center';
     ctx.fillText(player.name || 'Player', px, py - PLAYER_RADIUS - 14);
-    if (id !== localId) {
-      const hp = player.health / 100;
-      ctx.fillStyle = '#000'; ctx.fillRect(px-20, py-PLAYER_RADIUS-8, 40, 5);
-      ctx.fillStyle = hp > 0.5 ? '#22c55e' : hp > 0.25 ? '#f59e0b' : '#ef4444'; ctx.fillRect(px-20, py-PLAYER_RADIUS-8, 40*hp, 5);
+    const maxHp = Math.max(100, player.maxHealth || 100);
+    const hp = clamp((player.health || 0) / maxHp, 0, 1);
+    ctx.fillStyle = '#000'; ctx.fillRect(px - 22, py - PLAYER_RADIUS - 8, 44, 6);
+    ctx.fillStyle = hp > 0.5 ? '#22c55e' : hp > 0.25 ? '#f59e0b' : '#ef4444';
+    ctx.fillRect(px - 22, py - PLAYER_RADIUS - 8, 44 * hp, 6);
+    const armor = Math.max(0, player.armor || 0);
+    if (armor > 0) {
+      const ap = clamp(armor / 100, 0, 1);
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(px - 22, py - PLAYER_RADIUS - 2, 44, 4);
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillRect(px - 22, py - PLAYER_RADIUS - 2, 44 * ap, 4);
     }
     if ((player.level || 0) > 0) {
       ctx.fillStyle = (player.level||0) >= 10 ? '#facc15' : '#a78bfa'; ctx.font = 'bold 9px "Courier New"'; ctx.textAlign = 'center';
@@ -732,4 +1130,6 @@ function loop(now) {
 function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+syncMatchSettingsFromUI();
+renderShop();
 connectWS();
