@@ -32,6 +32,7 @@ const RUNNER_ZIGZAG_INTERVAL = 350; // ms between direction reversals for runner
 const RUNNER_ZIGZAG_STRENGTH = 0.45; // lateral movement factor for runner zigzag
 const ENEMY_SPAWN_EDGE_MARGIN = 40; // px from world edge for enemy spawn positions
 const WAVE_DIFFICULTY_SCALE = 0.08; // +8% enemy HP and damage per wave
+const DEFAULT_BOT_COUNT = 6;
 
 // Weapon definitions (server-authoritative)
 const WEAPONS = {
@@ -441,7 +442,7 @@ function applyShopPurchase(player, playerId, itemId) {
 
 // ─── Wave System ─────────────────────────────────────────────────────────────
 function getWaveConfig(wave) {
-  const botScale = Math.max(0, Math.min(20, matchConfig.bots || 6)) / 6;
+  const botScale = Math.max(0, Math.min(20, matchConfig.bots || DEFAULT_BOT_COUNT)) / DEFAULT_BOT_COUNT;
   const isBoss = wave % 5 === 0;
   if (isBoss) {
     return [
@@ -452,9 +453,9 @@ function getWaveConfig(wave) {
   }
   return [
     { type: 'zombie',  count: Math.round((4 + wave * 2) * botScale) },
-    { type: 'runner',  count: wave >= 3  ? Math.round(Math.floor(wave * 0.8)  * botScale) : 0 },
-    { type: 'shooter', count: wave >= 4  ? Math.round(Math.floor(wave * 0.5)  * botScale) : 0 },
-    { type: 'tank',    count: wave >= 6  ? Math.round(Math.floor(wave / 4)    * botScale) : 0 },
+    { type: 'runner',  count: wave >= 3  ? Math.floor(wave * 0.8 * botScale) : 0 },
+    { type: 'shooter', count: wave >= 4  ? Math.floor(wave * 0.5 * botScale) : 0 },
+    { type: 'tank',    count: wave >= 6  ? Math.floor((wave / 4) * botScale) : 0 },
   ];
 }
 
@@ -563,9 +564,9 @@ setInterval(() => {
 
     // vs other players
     let hit = false;
+    const shooter = players.get(bullet.ownerId);
     for (const [pid, player] of players) {
       if (pid === bullet.ownerId || player.dead) continue;
-      const shooter = players.get(bullet.ownerId);
       if (shooter && matchConfig.mode === 'tdm' && !matchConfig.friendlyFire && sameTeam(shooter, player)) continue;
       const dx = player.x - bullet.x, dy = player.y - bullet.y;
       if (dx * dx + dy * dy < (PLAYER_RADIUS + 5) ** 2) {
@@ -743,7 +744,9 @@ setInterval(() => {
     const timeLimitMs = Math.max(2, matchConfig.roundTimeMin || 8) * 60 * 1000;
     let winner = null;
     if (elapsedMs >= timeLimitMs) {
-      winner = [...players.values()].sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+      for (const p of players.values()) {
+        if (!winner || (p.score || 0) > (winner.score || 0)) winner = p;
+      }
     } else {
       winner = [...players.values()].find(p => (p.kills || 0) >= (matchConfig.fragLimit || 25));
     }
@@ -1066,6 +1069,7 @@ wss.on('connection', (ws) => {
           const player = players.get(connData.playerId);
           if (!player) return;
           if (typeof msg.itemId !== 'string' || msg.itemId.length > 64) return;
+          if (!Object.prototype.hasOwnProperty.call(SHOP_ITEMS, msg.itemId)) return;
           applyShopPurchase(player, connData.playerId, msg.itemId);
           break;
         }
@@ -1077,8 +1081,7 @@ wss.on('connection', (ws) => {
           const nowRespawn = Date.now();
           if (nowRespawn - (player.deathTime || 0) < RESPAWN_DELAY) {
             sendToPlayer(connData.playerId, {
-              type: 'shopResult',
-              ok: false,
+              type: 'respawnRejected',
               message: `Respawn in ${((RESPAWN_DELAY - (nowRespawn - (player.deathTime || 0))) / 1000).toFixed(1)}s`,
             });
             return;

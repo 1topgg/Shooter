@@ -205,6 +205,8 @@ let currentMode = 'survival';
 let xp = save.xp || 0, level = Math.floor(Math.sqrt(xp / 100)), coins = save.coins || 0;
 let pendingSkillPoints = skillPoints, regenTimer = 0, screenShake = 0;
 let reloadEndAt = 0, reloadDuration = 0;
+let reloadRequested = false;
+let reloadRequestSentAt = 0;
 let selectedShopCategory = 'weapons';
 let matchSettings = {
   mode: save.mode || 'survival',
@@ -348,6 +350,7 @@ function handleMessage(msg) {
       if (msg.playerId === localId) {
         reloadDuration = msg.duration || 0;
         reloadEndAt = Date.now() + reloadDuration;
+        reloadRequested = false;
       }
       break;
 
@@ -355,6 +358,7 @@ function handleMessage(msg) {
       if (msg.playerId === localId) {
         if (msg.weapons) playerWeapons = msg.weapons;
         reloadDuration = 0; reloadEndAt = 0;
+        reloadRequested = false;
       }
       break;
 
@@ -376,6 +380,10 @@ function handleMessage(msg) {
 
     case 'matchEnded':
       showNotification(msg.message || 'Match ended');
+      break;
+
+    case 'respawnRejected':
+      showNotification(msg.message || 'Respawn unavailable');
       break;
   }
 }
@@ -466,12 +474,12 @@ canvas.addEventListener('mouseup',   e => { if (e.button === 0) mouse.down = fal
 canvas.addEventListener('mouseleave', () => { mouse.down = false; });
 canvas.addEventListener('touchstart', e => {
   if (!isMobile) return;
-  const touch = [...e.touches].find(t => t.clientX > window.innerWidth * 0.45);
+  const touch = Array.from(e.touches).find(t => t.clientX > window.innerWidth * 0.45);
   if (touch) { mouse.x = touch.clientX; mouse.y = touch.clientY; }
 }, { passive: false });
 canvas.addEventListener('touchmove', e => {
   if (!isMobile) return;
-  const touch = [...e.touches].find(t => t.clientX > window.innerWidth * 0.45);
+  const touch = Array.from(e.touches).find(t => t.clientX > window.innerWidth * 0.45);
   if (touch) { mouse.x = touch.clientX; mouse.y = touch.clientY; }
 }, { passive: false });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -522,6 +530,7 @@ function switchWeapon(name) {
   const wpn = playerWeapons[name];
   currentWeapon = name;
   reloadEndAt = 0;
+  reloadRequested = false;
   send({ type: 'switchWeapon', weapon: name });
 }
 
@@ -539,6 +548,9 @@ function cycleWeapon(dir) {
 
 function requestReload() {
   if (!joined || !localPlayer || isDead) return;
+  if (reloadRequested || reloadEndAt > Date.now()) return;
+  reloadRequested = true;
+  reloadRequestSentAt = Date.now();
   send({ type: 'reload' });
 }
 
@@ -632,7 +644,7 @@ function onStickStart(e) {
 }
 function onStickMove(e) {
   if (!mobileStick.active) return;
-  const t = [...e.changedTouches].find(x => x.identifier === mobileStick.id);
+  const t = Array.from(e.changedTouches).find(x => x.identifier === mobileStick.id);
   if (!t) return;
   const dx = t.clientX - mobileStick.startX;
   const dy = t.clientY - mobileStick.startY;
@@ -647,7 +659,7 @@ function onStickMove(e) {
   e.preventDefault();
 }
 function onStickEnd(e) {
-  const t = [...e.changedTouches].find(x => x.identifier === mobileStick.id);
+  const t = Array.from(e.changedTouches).find(x => x.identifier === mobileStick.id);
   if (!t) return;
   mobileStick.active = false; mobileStick.id = null;
   mobileStick.x = 0; mobileStick.y = 0;
@@ -709,7 +721,8 @@ function update(dt) {
     );
   }
   const wpn = playerWeapons[currentWeapon];
-  if (wpn && wpn.ammoInClip === 0 && wpn.ammo > 0 && reloadEndAt <= Date.now()) requestReload();
+  if (wpn && wpn.ammoInClip === 0 && wpn.ammo > 0 && !reloadRequested && reloadEndAt <= Date.now()) requestReload();
+  if (reloadRequested && Date.now() - reloadRequestSentAt > 500) reloadRequested = false;
   if (getSkillBonus('regen') > 0) {
     regenTimer += dt;
     if (regenTimer >= 1) { regenTimer = 0; localPlayer.health = Math.min(playerMaxHp(), localPlayer.health + getSkillBonus('regen') * 0.5); }
