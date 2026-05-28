@@ -28,6 +28,10 @@ const WAVE_BONUS_COINS = 30;
 const ENEMY_BULLET_SPEED = 9;
 const ENEMY_BULLET_LIFETIME = 2500;
 const DROP_LIFETIME = 30000; // ms before ground drop expires
+const RUNNER_ZIGZAG_INTERVAL = 350; // ms between direction reversals for runner AI
+const RUNNER_ZIGZAG_STRENGTH = 0.45; // lateral movement factor for runner zigzag
+const ENEMY_SPAWN_EDGE_MARGIN = 40; // px from world edge for enemy spawn positions
+const WAVE_DIFFICULTY_SCALE = 0.08; // +8% enemy HP and damage per wave
 
 // Weapon definitions (server-authoritative)
 const WEAPONS = {
@@ -123,12 +127,12 @@ function getRandomSpawn(margin = 150) {
 
 function getEnemySpawn() {
   const side = Math.floor(Math.random() * 4);
-  const m = 40;
+  const edgeMargin = ENEMY_SPAWN_EDGE_MARGIN;
   switch (side) {
-    case 0: return { x: m + Math.random() * (WORLD_WIDTH  - m * 2), y: m };
-    case 1: return { x: WORLD_WIDTH  - m, y: m + Math.random() * (WORLD_HEIGHT - m * 2) };
-    case 2: return { x: m + Math.random() * (WORLD_WIDTH  - m * 2), y: WORLD_HEIGHT - m };
-    default:return { x: m,               y: m + Math.random() * (WORLD_HEIGHT - m * 2) };
+    case 0: return { x: edgeMargin + Math.random() * (WORLD_WIDTH  - edgeMargin * 2), y: edgeMargin };
+    case 1: return { x: WORLD_WIDTH  - edgeMargin, y: edgeMargin + Math.random() * (WORLD_HEIGHT - edgeMargin * 2) };
+    case 2: return { x: edgeMargin + Math.random() * (WORLD_WIDTH  - edgeMargin * 2), y: WORLD_HEIGHT - edgeMargin };
+    default:return { x: edgeMargin,               y: edgeMargin + Math.random() * (WORLD_HEIGHT - edgeMargin * 2) };
   }
 }
 
@@ -140,6 +144,9 @@ function broadcast(message, excludeWs = null) {
     try { client.send(data); } catch (_) {}
   });
 }
+
+// Shared level formula: level = floor(sqrt(xp / 100))
+function calculateLevel(xp) { return Math.floor(Math.sqrt((xp || 0) / 100)); }
 
 function safeSend(ws, message) {
   if (ws.readyState !== WebSocket.OPEN) return;
@@ -169,7 +176,7 @@ function getActivePlayers() {
 }
 
 function updatePlayerLevel(player) {
-  const newLevel = Math.floor(Math.sqrt((player.xp || 0) / 100));
+  const newLevel = calculateLevel(player.xp);
   if (newLevel > (player.level || 0)) {
     player.level = newLevel;
     player.skillPoints = (player.skillPoints || 0) + 1;
@@ -324,7 +331,8 @@ function getWaveConfig(wave) {
 
 function spawnEnemy(type) {
   const stats = ENEMY_STATS[type];
-  const scale = 1 + (waveState.wave - 1) * 0.08;
+  // Scale HP and damage by +WAVE_DIFFICULTY_SCALE per wave for progressive difficulty
+  const scale = 1 + (waveState.wave - 1) * WAVE_DIFFICULTY_SCALE;
   const pos = getEnemySpawn();
   const id = `e${++enemyIdCounter}`;
   enemies.set(id, {
@@ -530,15 +538,15 @@ setInterval(() => {
         }
       }
     } else if (enemy.type === 'runner') {
-      if (now - enemy.lastZigzag > 350) {
+      if (now - enemy.lastZigzag > RUNNER_ZIGZAG_INTERVAL) {
         enemy.zigzagDir *= -1;
         enemy.lastZigzag = now;
       }
       const perp = enemy.angle + Math.PI / 2;
       if (dist > contactDist) {
-        const zf = 0.45;
-        enemy.x += (dx / dist + Math.cos(perp) * zf * enemy.zigzagDir) * enemy.speed * TICK_DELTA;
-        enemy.y += (dy / dist + Math.sin(perp) * zf * enemy.zigzagDir) * enemy.speed * TICK_DELTA;
+        const zigzagFactor = RUNNER_ZIGZAG_STRENGTH;
+        enemy.x += (dx / dist + Math.cos(perp) * zigzagFactor * enemy.zigzagDir) * enemy.speed * TICK_DELTA;
+        enemy.y += (dy / dist + Math.sin(perp) * zigzagFactor * enemy.zigzagDir) * enemy.speed * TICK_DELTA;
       }
       // Melee attack
       if (dist < contactDist + 12 && now - enemy.lastAttackTime > enemy.attackCooldown) {
@@ -703,7 +711,7 @@ wss.on('connection', (ws) => {
             name, color: `hsl(${Math.random() * 360}, 70%, 55%)`,
             dead: false, deathTime: 0, lastInput: 0,
             xp: savedXP,
-            level: Math.floor(Math.sqrt(savedXP / 100)),
+            level: calculateLevel(savedXP),
             skillPoints: 0,
             coins: savedCoins,
             currentWeapon: 'pistol',
@@ -723,7 +731,7 @@ wss.on('connection', (ws) => {
           // Apply client skills (validate total skill points against level)
           if (msg.skills && typeof msg.skills === 'object') {
             const s = msg.skills;
-            const lvl = Math.floor(Math.sqrt(savedXP / 100));
+            const lvl = calculateLevel(savedXP);
             const dmgPts  = Math.min(5, Math.max(0, Math.floor(s.damage || 0)));
             const spdPts  = Math.min(5, Math.max(0, Math.floor(s.speed  || 0)));
             const hpPts   = Math.min(5, Math.max(0, Math.floor(s.maxHp  || 0)));
