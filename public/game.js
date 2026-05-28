@@ -98,9 +98,9 @@ const WEAPON_AMMO_INF  = { pistol: true, shotgun: true, smg: true, sniper: true 
 const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
 const WEAPON_ORDER = ['pistol', 'shotgun', 'smg', 'sniper'];
 const SHOP_CATALOG = [
-  { id: 'unlock_shotgun', category: 'weapons', name: 'Shotgun', cost: 400, desc: 'Unlock shotgun.' },
-  { id: 'unlock_smg', category: 'weapons', name: 'SMG', cost: 600, desc: 'Unlock SMG.' },
-  { id: 'unlock_sniper', category: 'weapons', name: 'Sniper', cost: 900, desc: 'Unlock sniper rifle.' },
+  { id: 'unlock_shotgun', category: 'weapons', name: 'Shotgun', cost: 150, desc: 'Unlock shotgun.' },
+  { id: 'unlock_smg', category: 'weapons', name: 'SMG', cost: 250, desc: 'Unlock SMG.' },
+  { id: 'unlock_sniper', category: 'weapons', name: 'Sniper', cost: 400, desc: 'Unlock sniper rifle.' },
   { id: 'ammo_shotgun', category: 'ammo', name: 'Shotgun ammo', cost: 120, desc: '+24 shells.' },
   { id: 'ammo_smg', category: 'ammo', name: 'SMG ammo', cost: 120, desc: '+60 bullets.' },
   { id: 'ammo_sniper', category: 'ammo', name: 'Sniper ammo', cost: 150, desc: '+8 rounds.' },
@@ -443,7 +443,26 @@ function onDeath(killerName) {
 }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
+// Fix: Clear all keys when focus is lost or state changes
+function clearAllKeys() {
+  Object.keys(keys).forEach(k => keys[k] = false);
+  mouse.down = false;
+}
+
+window.addEventListener('blur', clearAllKeys);
+window.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearAllKeys();
+});
+
 window.addEventListener('keydown', e => {
+  // Prevent stuck keys from popups/modals
+  if (isDead || isPaused || isShopOpen) {
+    if (!['Escape', 'KeyB', 'Tab'].includes(e.code)) {
+      clearAllKeys();
+      return;
+    }
+  }
+  
   keys[e.code] = true;
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && localPlayer && !isDead) tryDash();
@@ -558,13 +577,18 @@ function togglePause(force) {
   if (!joined || isDead) return;
   isPaused = typeof force === 'boolean' ? force : !isPaused;
   if (pausePanel) pausePanel.style.display = isPaused ? 'flex' : 'none';
+  // Clear keys when pausing to prevent stuck movement
+  if (isPaused) clearAllKeys();
 }
 
 function toggleShop(force) {
   const open = typeof force === 'boolean' ? force : !isShopOpen;
   isShopOpen = open;
   if (shopPanel) shopPanel.style.display = open ? 'flex' : 'none';
-  if (open) renderShop();
+  if (open) {
+    renderShop();
+    clearAllKeys(); // Clear keys when opening shop
+  }
 }
 
 function syncMatchSettingsFromUI() {
@@ -972,33 +996,106 @@ function render() {
   drawMinimap();
 }
 function drawWorld() {
-  ctx.fillStyle = '#090c12'; ctx.fillRect(0, 0, worldW, worldH);
-  ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1;
+  // Enhanced gradient background
+  const bgGradient = ctx.createRadialGradient(worldW / 2, worldH / 2, 0, worldW / 2, worldH / 2, worldW);
+  bgGradient.addColorStop(0, '#1a1a2e');
+  bgGradient.addColorStop(0.5, '#16213e');
+  bgGradient.addColorStop(1, '#0f1419');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, worldW, worldH);
+  
+  // Enhanced grid with glow
+  ctx.strokeStyle = 'rgba(56,189,248,0.08)'; 
+  ctx.lineWidth = 1;
   const gsx = Math.floor(camera.x / 60) * 60, gsy = Math.floor(camera.y / 60) * 60;
   const gex = camera.x + canvas.width, gey = camera.y + canvas.height;
-  for (let x = gsx; x <= gex; x += 60) { ctx.beginPath(); ctx.moveTo(x, Math.max(0, camera.y)); ctx.lineTo(x, Math.min(worldH, gey)); ctx.stroke(); }
-  for (let y = gsy; y <= gey; y += 60) { ctx.beginPath(); ctx.moveTo(Math.max(0, camera.x), y); ctx.lineTo(Math.min(worldW, gex), y); ctx.stroke(); }
-  ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, worldW - 4, worldH - 4);
+  for (let x = gsx; x <= gex; x += 60) { 
+    ctx.beginPath(); 
+    ctx.moveTo(x, Math.max(0, camera.y)); 
+    ctx.lineTo(x, Math.min(worldH, gey)); 
+    ctx.stroke(); 
+  }
+  for (let y = gsy; y <= gey; y += 60) { 
+    ctx.beginPath(); 
+    ctx.moveTo(Math.max(0, camera.x), y); 
+    ctx.lineTo(Math.min(worldW, gex), y); 
+    ctx.stroke(); 
+  }
+  
+  // Enhanced border with glow
+  ctx.strokeStyle = '#ef4444'; 
+  ctx.lineWidth = 5; 
+  ctx.shadowColor = '#ef4444';
+  ctx.shadowBlur = 15;
+  ctx.strokeRect(2, 2, worldW - 4, worldH - 4);
+  ctx.shadowBlur = 0;
+  
+  // Gradient edges
   const grd = ctx.createLinearGradient(0, 0, 30, 0);
-  grd.addColorStop(0, 'rgba(239,68,68,0.15)'); grd.addColorStop(1, 'rgba(239,68,68,0)');
-  ctx.fillStyle = grd; ctx.fillRect(0, 0, 30, worldH);
+  grd.addColorStop(0, 'rgba(239,68,68,0.2)'); 
+  grd.addColorStop(1, 'rgba(239,68,68,0)');
+  ctx.fillStyle = grd; 
+  ctx.fillRect(0, 0, 30, worldH);
 }
 function drawDrops() {
   for (const d of drops) {
     const color = DROP_COLORS[d.type] || '#fff', icon = DROP_ICONS[d.type] || '?';
-    const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.004 + d.x * 0.1);
-    ctx.shadowColor = color; ctx.shadowBlur = 12 * pulse;
-    ctx.beginPath(); ctx.arc(d.x, d.y, 11, 0, Math.PI * 2);
-    ctx.fillStyle = color + '2a'; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    const pulse = 0.8 + 0.2 * Math.sin(Date.now() * 0.005 + d.x * 0.1);
+    const time = Date.now() * 0.001;
+    const float = Math.sin(time * 2 + d.x * 0.1) * 3; // Floating animation
+    
+    // Enhanced glow
+    ctx.shadowColor = color; 
+    ctx.shadowBlur = 20 * pulse;
+    ctx.beginPath(); 
+    ctx.arc(d.x, d.y + float, 12, 0, Math.PI * 2);
+    
+    // Gradient fill
+    const dropGrad = ctx.createRadialGradient(d.x, d.y + float, 0, d.x, d.y + float, 12);
+    dropGrad.addColorStop(0, color);
+    dropGrad.addColorStop(1, color + '60');
+    ctx.fillStyle = dropGrad;
+    ctx.fill(); 
+    
+    ctx.strokeStyle = color; 
+    ctx.lineWidth = 2.5; 
+    ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = color; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(icon, d.x, d.y); ctx.textBaseline = 'alphabetic';
-    if (d.type === 'coins' && d.amount) { ctx.fillStyle = '#fbbf24'; ctx.font = '9px Arial'; ctx.fillText(d.amount, d.x, d.y + 18); }
+    
+    // Icon
+    ctx.fillStyle = '#fff'; 
+    ctx.font = 'bold 14px Arial'; 
+    ctx.textAlign = 'center'; 
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(icon, d.x, d.y + float); 
+    ctx.shadowBlur = 0;
+    ctx.textBaseline = 'alphabetic';
+    
+    if (d.type === 'coins' && d.amount) { 
+      ctx.fillStyle = '#fbbf24'; 
+      ctx.font = 'bold 10px Arial'; 
+      ctx.fillText(d.amount, d.x, d.y + float + 20); 
+    }
   }
   ctx.shadowBlur = 0; ctx.textAlign = 'left';
 }
 function drawEnemyBullets() {
-  for (const b of enemyBullets) { ctx.shadowColor = '#f87171'; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI * 2); ctx.fillStyle = '#f87171'; ctx.fill(); }
+  for (const b of enemyBullets) { 
+    // Enhanced bullet with trail
+    ctx.shadowColor = '#f87171'; 
+    ctx.shadowBlur = 15; 
+    ctx.beginPath(); 
+    ctx.arc(b.x, b.y, 6, 0, Math.PI * 2); 
+    
+    const bulletGrad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 6);
+    bulletGrad.addColorStop(0, '#fecaca');
+    bulletGrad.addColorStop(0.5, '#f87171');
+    bulletGrad.addColorStop(1, '#dc2626');
+    ctx.fillStyle = bulletGrad;
+    ctx.fill(); 
+  }
   ctx.shadowBlur = 0;
 }
 function drawEnemies() {

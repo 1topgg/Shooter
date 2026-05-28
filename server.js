@@ -42,9 +42,9 @@ const WEAPONS = {
   sniper:  { damage: 90, bulletCount: 1, spread: 0,    baseCooldown: 1500, infiniteAmmo: true,  maxAmmo: Infinity, magazineSize: 5, reloadMs: 1800 },
 };
 const SHOP_ITEMS = {
-  unlock_shotgun: { cost: 400, type: 'unlockWeapon', weapon: 'shotgun' },
-  unlock_smg: { cost: 600, type: 'unlockWeapon', weapon: 'smg' },
-  unlock_sniper: { cost: 900, type: 'unlockWeapon', weapon: 'sniper' },
+  unlock_shotgun: { cost: 150, type: 'unlockWeapon', weapon: 'shotgun' },
+  unlock_smg: { cost: 250, type: 'unlockWeapon', weapon: 'smg' },
+  unlock_sniper: { cost: 400, type: 'unlockWeapon', weapon: 'sniper' },
   ammo_shotgun: { cost: 120, type: 'ammo', weapon: 'shotgun', amount: 24 },
   ammo_smg: { cost: 120, type: 'ammo', weapon: 'smg', amount: 60 },
   ammo_sniper: { cost: 150, type: 'ammo', weapon: 'sniper', amount: 8 },
