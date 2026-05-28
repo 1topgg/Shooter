@@ -65,7 +65,25 @@ const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
 
 // ─── Save System ─────────────────────────────────────────────────────────────
 const SAVE_KEY = 'shooter_save_v2';
-function loadSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (_) { return {}; } }
+const MAX_SAVE_XP    = 10000000;
+const MAX_SAVE_COINS = 100000;
+function loadSave() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!raw || typeof raw !== 'object') return {};
+    const safe = {};
+    if (typeof raw.xp    === 'number' && isFinite(raw.xp))    safe.xp    = Math.max(0, Math.min(raw.xp,    MAX_SAVE_XP));
+    if (typeof raw.coins === 'number' && isFinite(raw.coins))  safe.coins = Math.max(0, Math.min(raw.coins, MAX_SAVE_COINS));
+    if (typeof raw.skillPoints === 'number' && isFinite(raw.skillPoints)) safe.skillPoints = Math.max(0, Math.floor(raw.skillPoints));
+    if (raw.skills && typeof raw.skills === 'object') {
+      safe.skills = {};
+      for (const [k, v] of Object.entries(raw.skills)) {
+        if (typeof v === 'number' && isFinite(v)) safe.skills[k] = Math.max(0, Math.min(10, Math.floor(v)));
+      }
+    }
+    return safe;
+  } catch (_) { return {}; }
+}
 function writeSave(data) { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...loadSave(), ...data })); } catch (_) {} }
 const save = loadSave();
 
@@ -419,11 +437,13 @@ function updateHUD() {
   }
   if (powerupsDisplay) {
     activePowerUps = activePowerUps.filter(p => p.expiresAt > Date.now());
-    powerupsDisplay.innerHTML = activePowerUps.map(p => {
+    powerupsDisplay.innerHTML = '';
+    for (const p of activePowerUps) {
       const label = POWERUP_LABELS[p.type] || 'power-up';
       const secs = Math.ceil((p.expiresAt - Date.now()) / 1000);
-      return '<span class="powerup-icon">' + label + ' ' + secs + 's</span>';
-    }).join('');
+      const span = document.createElement('span'); span.className = 'powerup-icon';
+      span.textContent = label + ' ' + secs + 's'; powerupsDisplay.appendChild(span);
+    }
   }
   if (skillsBtn) skillsBtn.textContent = pendingSkillPoints > 0 ? ('Skills (' + pendingSkillPoints + ')') : 'Skills [K]';
 }
@@ -461,18 +481,27 @@ function showLevelUp(lvl) {
 function renderSkillOptions() {
   const container = document.getElementById('skill-options');
   if (!container) return;
+  container.innerHTML = '';
   const available = Object.entries(SKILL_DEFS).filter(([k, d]) => (skills[k] || 0) < d.max);
   const opts = available.sort(() => Math.random() - 0.5).slice(0, 3);
   if (opts.length === 0) {
-    container.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:12px">All skills maxed!</p>';
+    const p = document.createElement('p');
+    p.style.cssText = 'color:#94a3b8;text-align:center;padding:12px';
+    p.textContent = 'All skills maxed!';
+    container.appendChild(p);
     setTimeout(() => { if (levelupPopup) levelupPopup.style.display = 'none'; }, 2000);
     return;
   }
-  container.innerHTML = opts.map(([k, d]) =>
-    '<button class="skill-choice-btn" onclick="pickSkill(\'' + k + '\')">' +
-    '<div class="skill-name">' + d.name + '</div>' +
-    '<div class="skill-level">Level ' + ((skills[k] || 0) + 1) + '/' + d.max + '</div></button>'
-  ).join('');
+  for (const [k, d] of opts) {
+    const btn = document.createElement('button');
+    btn.className = 'skill-choice-btn';
+    const nameDiv = document.createElement('div'); nameDiv.className = 'skill-name'; nameDiv.textContent = d.name;
+    const lvlDiv  = document.createElement('div'); lvlDiv.className  = 'skill-level'; lvlDiv.textContent = 'Level ' + ((skills[k] || 0) + 1) + '/' + d.max;
+    btn.appendChild(nameDiv); btn.appendChild(lvlDiv);
+    const skillKey = k;
+    btn.addEventListener('click', () => pickSkill(skillKey));
+    container.appendChild(btn);
+  }
 }
 function pickSkill(key) {
   skills[key] = Math.min(SKILL_DEFS[key].max, (skills[key] || 0) + 1);

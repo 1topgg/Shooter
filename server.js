@@ -23,9 +23,11 @@ const MAX_MESSAGE_LENGTH = 2048;
 const MAX_HEALTH = 100;
 const RESPAWN_DELAY = 3000;
 const WAVE_PREP_TIME = 10000;
+const WAVE_TRANSITION_DELAY = 200; // Allow clients to process wave-complete before prep starts
 const WAVE_BONUS_COINS = 30;
 const ENEMY_BULLET_SPEED = 9;
 const ENEMY_BULLET_LIFETIME = 2500;
+const DROP_LIFETIME = 30000; // ms before ground drop expires
 
 // Weapon definitions (server-authoritative)
 const WEAPONS = {
@@ -220,6 +222,11 @@ function killEnemy(enemy, killerId, now) {
   waveState.enemiesSpawned = Math.max(0, waveState.enemiesSpawned - 1);
 }
 
+function getPlayerMaxHealth(player) {
+  // Accounts for maxHp skill bonus applied on join
+  return player.health > MAX_HEALTH ? player.health : MAX_HEALTH;
+}
+
 function applyDamageToPlayer(player, playerId, damage, killerId, now) {
   // Check invincibility
   const checkTime = Date.now();
@@ -263,7 +270,7 @@ function applyDamageToPlayer(player, playerId, damage, killerId, now) {
 function pickupDrop(player, playerId, drop) {
   switch (drop.type) {
     case 'hp':
-      player.health = Math.min(MAX_HEALTH + (player.level || 0) * 5, player.health + drop.amount);
+      player.health = Math.min(getPlayerMaxHealth(player), player.health + drop.amount);
       break;
     case 'ammo': {
       const cw = player.currentWeapon || 'pistol';
@@ -395,7 +402,7 @@ setInterval(() => {
             timeLeft: WAVE_PREP_TIME / 1000,
           });
         }
-      }, 200);
+      }, WAVE_TRANSITION_DELAY);
     }
   } else if (active.length === 0 && waveState.state === 'active' && waveState.wave > 0) {
     // No active players — pause wave timer
@@ -557,7 +564,7 @@ setInterval(() => {
 
   // ── Drops ───────────────────────────────────────────────────────────────────
   for (const [did, drop] of drops) {
-    if (now - drop.createdAt > 30000) {
+    if (now - drop.createdAt > DROP_LIFETIME) {
       drops.delete(did);
       broadcast({ type: 'dropExpired', dropId: did });
       continue;
@@ -681,9 +688,11 @@ wss.on('connection', (ws) => {
             ? msg.name.trim().slice(0, 16)
             : `Гравець${Math.floor(Math.random() * 999)}`;
 
-          // Restore XP/level from client save
-          const savedXP    = (typeof msg.savedXP    === 'number' && msg.savedXP    >= 0) ? msg.savedXP    : 0;
-          const savedCoins = (typeof msg.savedCoins === 'number' && msg.savedCoins >= 0) ? msg.savedCoins : 0;
+          // Restore XP/level from client save (cap at reasonable limits)
+          const MAX_SAVED_XP    = 10000000;
+          const MAX_SAVED_COINS = 100000;
+          const savedXP    = (typeof msg.savedXP    === 'number' && msg.savedXP    >= 0) ? Math.min(msg.savedXP,    MAX_SAVED_XP)    : 0;
+          const savedCoins = (typeof msg.savedCoins === 'number' && msg.savedCoins >= 0) ? Math.min(msg.savedCoins, MAX_SAVED_COINS) : 0;
 
           const player = {
             id: playerId,
@@ -711,12 +720,19 @@ wss.on('connection', (ws) => {
             speedMult:  1.0,
           };
 
-          // Apply client skills
+          // Apply client skills (validate total skill points against level)
           if (msg.skills && typeof msg.skills === 'object') {
             const s = msg.skills;
-            player.damageMult = 1 + Math.min(5, Math.max(0, s.damage || 0)) * 0.10;
-            player.speedMult  = 1 + Math.min(5, Math.max(0, s.speed  || 0)) * 0.10;
-            player.health = MAX_HEALTH + Math.min(5, Math.max(0, s.maxHp || 0)) * 20;
+            const lvl = Math.floor(Math.sqrt(savedXP / 100));
+            const dmgPts  = Math.min(5, Math.max(0, Math.floor(s.damage || 0)));
+            const spdPts  = Math.min(5, Math.max(0, Math.floor(s.speed  || 0)));
+            const hpPts   = Math.min(5, Math.max(0, Math.floor(s.maxHp  || 0)));
+            const totalSpent = dmgPts + spdPts + hpPts;
+            if (totalSpent <= lvl) {
+              player.damageMult = 1 + dmgPts * 0.10;
+              player.speedMult  = 1 + spdPts * 0.10;
+              player.health = MAX_HEALTH + hpPts * 20;
+            }
           }
 
           players.set(playerId, player);
@@ -821,11 +837,14 @@ wss.on('connection', (ws) => {
           if (!player) return;
           const wn = msg.weapon;
           const UNLOCK_COST = { shotgun: 400, smg: 600, sniper: 900 };
-          if (!Object.prototype.hasOwnProperty.call(UNLOCK_COST, wn)) break;
+          // Only allow known weapon names to prevent prototype pollution
+          const UNLOCKABLE_WEAPONS = ['shotgun', 'smg', 'sniper'];
+          if (!UNLOCKABLE_WEAPONS.includes(wn)) break;
           const cost = UNLOCK_COST[wn];
-          if (cost && player.coins >= cost && player.weapons[wn] && player.weapons[wn].ammo === 0) {
+          const pwpn = player.weapons[wn];
+          if (cost && player.coins >= cost && pwpn && pwpn.ammo === 0) {
             player.coins -= cost;
-            player.weapons[wn].ammo = Math.floor(WEAPONS[wn].maxAmmo / 2);
+            pwpn.ammo = Math.floor(WEAPONS[wn].maxAmmo / 2);
             sendToPlayer(player.id, {
               type: 'weaponUnlocked',
               weapon: wn,
