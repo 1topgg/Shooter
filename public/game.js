@@ -863,6 +863,9 @@ function updateHUD() {
     weaponDisplay.textContent = (WEAPON_NAMES[currentWeapon] || currentWeapon) + ammoStr;
     weaponDisplay.style.color = WEAPON_COLORS[currentWeapon] || '#fff';
     if (ammoDisplay) ammoDisplay.textContent = WEAPON_AMMO_INF[currentWeapon] ? 'Ammo: ∞' : 'Ammo: ' + Math.max(0, wpn.ammoInClip || 0) + ' / ' + Math.max(0, wpn.ammo || 0);
+    const isLowAmmo = !!(wpn && !WEAPON_AMMO_INF[currentWeapon] && (wpn.magazineSize || 0) > 0 && (wpn.ammoInClip || 0) <= Math.max(1, Math.floor((wpn.magazineSize || 0) * 0.2)));
+    weaponDisplay.classList.toggle('low-ammo', isLowAmmo);
+    if (ammoDisplay) ammoDisplay.classList.toggle('low-ammo', isLowAmmo);
   }
   for (const slot of weaponSelectorSlots) slot.classList.toggle('active', (slot.dataset.key === WEAPON_TO_KEY[currentWeapon]));
   if (armorDisplay) armorDisplay.textContent = 'Armor: ' + Math.max(0, Math.round(localPlayer.armor || 0));
