@@ -997,12 +997,6 @@ function showNotification(text) {
 function addKillFeed(killer, victim) {
   killFeed.push({ killer, victim, fadeTime: Date.now() + 6000 });
   if (killFeed.length > 5) killFeed.shift();
-  // Combo tracking: increment combo when local player gets a kill
-  if (killer === localPlayerName && victim !== localPlayerName) {
-    comboCount++;
-    comboTimer = 0;
-    if (comboCount >= 2) updateComboDisplay();
-  }
   renderKillFeed();
 }
 
@@ -1023,7 +1017,8 @@ function updateComboDisplay() {
   void comboDisplay.offsetWidth;
   comboDisplay.style.animation = '';
   screenShake = Math.max(screenShake, Math.min(comboCount * 2, 8));
-  setTimeout(() => { if (comboCount < 2 && comboDisplay) comboDisplay.style.display = 'none'; }, 3000);
+  const snapshotCount = comboCount;
+  setTimeout(() => { if (comboCount === snapshotCount && comboDisplay) comboDisplay.style.display = 'none'; }, 3000);
 }
 function renderKillFeed() {
   const now = Date.now();
