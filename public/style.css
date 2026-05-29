@@ -1019,3 +1019,111 @@ button:disabled {
   #leaderboard-mini { top: 128px; left: 10px; min-width: 150px; }
   #ammo-display, #armor-display { left: 16px; }
 }
+
+#start-screen:not([style*="display: none"]) ~ #mobile-controls,
+#death-screen:not([style*="display: none"]) ~ #mobile-controls,
+#skills-panel:not([style*="display: none"]) ~ #mobile-controls {
+  display: none !important;
+}
+
+/* ── Start screen polish ───────────────────────────────── */
+#start-screen {
+  padding: clamp(12px, 2vw, 24px);
+  overflow-y: auto;
+  background: radial-gradient(circle at top, rgba(56,189,248,0.18), rgba(0,0,0,0.9));
+}
+#start-screen .start-box {
+  max-width: min(980px, 95vw);
+  text-align: left;
+  padding: clamp(20px, 3vw, 36px);
+}
+#start-screen .start-header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+#start-screen .start-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.4fr) minmax(260px, 1fr);
+  gap: 16px;
+  margin-bottom: 14px;
+}
+#start-screen .start-main {
+  display: grid;
+  gap: 12px;
+}
+#start-screen .start-name-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+#start-screen #name-input {
+  margin-bottom: 0;
+}
+#start-screen #mode-select {
+  margin-bottom: 0;
+  padding: 12px;
+  border-color: rgba(56,189,248,0.25);
+}
+#start-screen .settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+#start-screen .controls-info {
+  margin-bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px 10px;
+  line-height: 1.55;
+}
+#start-screen .start-actions {
+  margin-bottom: 12px;
+}
+#start-screen .start-actions button {
+  width: auto;
+  min-width: 160px;
+  padding: 10px 14px;
+}
+#start-screen #play-btn {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  #start-screen .start-layout {
+    grid-template-columns: 1fr;
+  }
+  #start-screen .controls-info {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  #start-screen .start-box {
+    width: 100%;
+    border-radius: 14px;
+    padding: 16px;
+  }
+  #start-screen .start-header {
+    margin-bottom: 12px;
+  }
+  #start-screen .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  #start-screen .controls-info {
+    grid-template-columns: 1fr;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  #start-screen .start-actions {
+    margin-bottom: 10px;
+  }
+  #start-screen .start-actions button,
+  #start-screen #play-btn {
+    width: 100%;
+    padding: 11px 12px;
+    font-size: 14px;
+    letter-spacing: 0.8px;
+  }
+}

@@ -1270,8 +1270,6 @@ function lightenColor(color, percent) {
   const B = Math.min(255, (num & 0x0000FF) + amt);
   return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
 }
-  ctx.textAlign = 'left';
-}
 function drawBullets() {
   for (const b of bullets) { ctx.shadowColor = '#fde047'; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(b.x, b.y, BULLET_RADIUS, 0, Math.PI*2); ctx.fillStyle = '#fde047'; ctx.fill(); }
   ctx.shadowBlur = 0;
