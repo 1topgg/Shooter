@@ -118,57 +118,72 @@
 
   <!-- Start Screen -->
   <div id="start-screen">
-    <div class="screen-box">
-      <h1>☠ SHOOTER PvE</h1>
-      <p class="subtitle">Top-down shooter with AI enemies</p>
-      <div id="mode-select">
-        <h3>Mode Select</h3>
-        <label>Mode
-          <select id="mode-select-input">
-            <option value="survival">Survival / Waves</option>
-            <option value="deathmatch">Deathmatch (FFA)</option>
-            <option value="tdm">Team Deathmatch</option>
-          </select>
-        </label>
-        <label>Difficulty
-          <select id="difficulty-input">
-            <option value="easy">Easy</option>
-            <option value="normal" selected>Normal</option>
-            <option value="hard">Hard</option>
-            <option value="insane">Insane</option>
-          </select>
-        </label>
-        <label>Friendly Fire
-          <select id="friendly-fire-input">
-            <option value="off" selected>OFF</option>
-            <option value="on">ON</option>
-          </select>
-        </label>
-        <label>Bots
-          <input id="bots-input" type="number" min="0" max="20" value="6" />
-        </label>
-        <label>Frag limit
-          <input id="frag-limit-input" type="number" min="5" max="100" value="25" />
-        </label>
-        <label>Round time (min)
-          <input id="round-time-input" type="number" min="2" max="30" value="8" />
-        </label>
+    <div class="screen-box start-box">
+      <div class="start-header">
+        <h1>☠ SHOOTER PvE</h1>
+        <p class="subtitle">Top-down shooter with AI enemies</p>
       </div>
-      <div class="controls-info">
-        <div><kbd>W A S D</kbd> — move</div>
-        <div><kbd>Mouse</kbd> — aim</div>
-        <div><kbd>LMB</kbd> — shoot</div>
-        <div><kbd>Space</kbd> — dash</div>
-        <div><kbd>Shift</kbd> — sprint</div>
-        <div><kbd>1-4</kbd> — switch weapon</div>
-        <div><kbd>Q</kbd> — prev weapon</div>
-        <div><kbd>R</kbd> — reload</div>
-        <div><kbd>Esc</kbd> — pause</div>
-        <div><kbd>Tab</kbd> — scoreboard</div>
-        <div><kbd>B</kbd> — shop</div>
-        <div><kbd>K</kbd> — skills panel</div>
+
+      <div class="start-layout">
+        <div class="start-main">
+          <label class="start-name-field" for="name-input">
+            Player name
+            <input type="text" id="name-input" placeholder="Your name..." maxlength="16" autocomplete="off" />
+          </label>
+
+          <div id="mode-select">
+            <h3>Match Settings</h3>
+            <div class="settings-grid">
+              <label>Mode
+                <select id="mode-select-input">
+                  <option value="survival">Survival / Waves</option>
+                  <option value="deathmatch">Deathmatch (FFA)</option>
+                  <option value="tdm">Team Deathmatch</option>
+                </select>
+              </label>
+              <label>Difficulty
+                <select id="difficulty-input">
+                  <option value="easy">Easy</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="hard">Hard</option>
+                  <option value="insane">Insane</option>
+                </select>
+              </label>
+              <label>Friendly Fire
+                <select id="friendly-fire-input">
+                  <option value="off" selected>OFF</option>
+                  <option value="on">ON</option>
+                </select>
+              </label>
+              <label>Bots
+                <input id="bots-input" type="number" min="0" max="20" value="6" />
+              </label>
+              <label>Frag limit
+                <input id="frag-limit-input" type="number" min="5" max="100" value="25" />
+              </label>
+              <label>Round time (min)
+                <input id="round-time-input" type="number" min="2" max="30" value="8" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-info">
+          <div><kbd>W A S D</kbd> — move</div>
+          <div><kbd>Mouse</kbd> — aim</div>
+          <div><kbd>LMB</kbd> — shoot</div>
+          <div><kbd>Space</kbd> — dash</div>
+          <div><kbd>Shift</kbd> — sprint</div>
+          <div><kbd>1-4</kbd> — switch weapon</div>
+          <div><kbd>Q</kbd> — prev weapon</div>
+          <div><kbd>R</kbd> — reload</div>
+          <div><kbd>Esc</kbd> — pause</div>
+          <div><kbd>Tab</kbd> — scoreboard</div>
+          <div><kbd>B</kbd> — shop</div>
+          <div><kbd>K</kbd> — skills panel</div>
+        </div>
       </div>
-      <input type="text" id="name-input" placeholder="Your name..." maxlength="16" autocomplete="off" />
+
       <div class="start-actions">
         <button id="open-shop-btn" type="button">Open Shop</button>
       </div>
