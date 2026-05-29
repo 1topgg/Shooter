@@ -12,11 +12,17 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["game", "multiplayer", "websocket", "2d", "shooter"],
+  "keywords": [
+    "game",
+    "multiplayer",
+    "websocket",
+    "2d",
+    "shooter"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.21.2",
+    "express": "^4.22.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
