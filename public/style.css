@@ -124,13 +124,11 @@ body {
   backdrop-filter: blur(4px);
   text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
-  border: 1px solid #334155;
-}
 
-/* Weapon display - Bottom left corner, clear layout */
+/* Weapon display - above minimap, right side */
 #weapon-display {
   position: absolute;
-  bottom: 120px; right: 20px;
+  bottom: 210px; right: 20px;
   font-size: 18px;
   font-weight: 700;
   color: #f8fafc;
@@ -161,12 +159,12 @@ body {
   text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
 #ammo-display { 
-  bottom: 86px; 
+  bottom: 176px; 
   color: #f8fafc;
   border-color: rgba(56,189,248,0.5);
 }
 #armor-display { 
-  bottom: 52px; 
+  bottom: 144px; 
   color: #60a5fa;
   border-color: rgba(96,165,250,0.5);
 }
@@ -238,17 +236,17 @@ body {
   50% { box-shadow: 0 4px 12px rgba(124,58,237,0.8), 0 0 30px rgba(192,132,252,0.6); }
 }
 
-/* Skills button - Better positioned, no overlap */
+/* Skills button - positioned below player count */
 #skills-btn {
   position: absolute;
-  top: 48px; right: 20px;
+  top: 95px; right: 20px;
   background: linear-gradient(135deg, #1e1b4b 0%, #4c1d95 100%);
   border: 2px solid #7c3aed;
   color: #e9d5ff;
   font-family: 'Segoe UI', 'Roboto', monospace;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border-radius: 8px;
   cursor: pointer;
   width: auto;
@@ -261,6 +259,61 @@ body {
   background: linear-gradient(135deg, #2e1b6b 0%, #6d28d9 100%); 
   box-shadow: 0 6px 20px rgba(124,58,237,0.7);
   transform: translateY(-2px);
+}
+
+/* HUD Shop button */
+#hud-shop-btn {
+  position: absolute;
+  top: 140px; right: 20px;
+  background: linear-gradient(135deg, #7c2d12 0%, #c2410c 100%);
+  border: 2px solid #f97316;
+  color: #fed7aa;
+  font-family: 'Segoe UI', 'Roboto', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  width: auto;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(249,115,22,0.4);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  backdrop-filter: blur(4px);
+}
+#hud-shop-btn:hover {
+  background: linear-gradient(135deg, #9a3412 0%, #ea580c 100%);
+  box-shadow: 0 6px 20px rgba(249,115,22,0.7);
+  transform: translateY(-2px);
+}
+
+/* Combo display */
+#combo-display {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  text-align: center;
+  z-index: 50;
+  animation: combo-pop 0.3s cubic-bezier(0.68,-0.55,0.27,1.55);
+}
+@keyframes combo-pop {
+  from { transform: translate(-50%,-50%) scale(0.5); opacity: 0; }
+  to   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+}
+.combo-text {
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-shadow: 0 0 30px currentColor, 0 4px 8px rgba(0,0,0,0.9);
+  line-height: 1;
+}
+.combo-sub {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+  margin-top: 4px;
 }
 
 /* Health bar - Better layout at bottom left */
@@ -316,48 +369,34 @@ body {
 
 #stats {
   position: absolute;
-  top: 95px; right: 20px;
+  top: 188px; right: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   align-items: flex-end;
 }
 #stats span {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   background: linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(30,27,75,0.9) 100%);
-  padding: 6px 14px;
+  padding: 5px 12px;
   border-radius: 8px;
   border: 2px solid rgba(51,65,85,0.6);
   backdrop-filter: blur(4px);
   box-shadow: 0 4px 10px rgba(0,0,0,0.5);
   text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
-#kills-display { color: #22c55e; border-color: rgba(34,197,94,0.5); }
-#deaths-display { color: #ef4444; border-color: rgba(239,68,68,0.5); }
-#score-display { color: #fbbf24; border-color: rgba(251,191,36,0.5); }
-#killstreak-display { color: #f97316; border-color: rgba(249,115,22,0.5); }
-  position: absolute;
-  top: 26px; left: 50%;
-  transform: translateX(-50%);
-  margin-top: 30px;
-  display: flex;
-  gap: 20px;
-  font-size: 13px;
-  font-weight: bold;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-}
-#kills-display  { color: #f87171; }
-#deaths-display { color: #a78bfa; }
-#score-display  { color: #fbbf24; }
-#killstreak-display { color: #facc15; }
+#kills-display { color: #22c55e; border-color: rgba(34,197,94,0.5) !important; }
+#deaths-display { color: #ef4444; border-color: rgba(239,68,68,0.5) !important; }
+#score-display { color: #fbbf24; border-color: rgba(251,191,36,0.5) !important; }
+#killstreak-display { color: #f97316; border-color: rgba(249,115,22,0.5) !important; }
 
 #leaderboard-mini {
   position: absolute;
-  top: 90px;
+  top: 148px;
   left: 20px;
-  min-width: 180px;
-  font-size: 12px;
+  min-width: 160px;
+  font-size: 11px;
   background: rgba(0,0,0,0.55);
   border: 1px solid #334155;
   border-radius: 8px;
@@ -368,28 +407,27 @@ body {
 
 #player-count {
   position: absolute;
-  top: 26px; right: 20px;
+  top: 48px; right: 20px;
   font-size: 13px;
   color: #94a3b8;
   background: rgba(0,0,0,0.5);
   padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid #334155;
-  margin-top: 30px;
 }
 
-/* Kill feed */
+/* Kill feed - positioned below stats to avoid overlap */
 #kill-feed {
   position: absolute;
-  top: 90px; right: 20px;
+  top: 380px; right: 20px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: 300px;
+  max-width: 260px;
 }
 .kill-entry {
-  font-size: 12px;
-  background: rgba(0,0,0,0.6);
+  font-size: 11px;
+  background: rgba(0,0,0,0.7);
   padding: 4px 8px;
   border-radius: 4px;
   border-left: 3px solid #f87171;
@@ -973,38 +1011,60 @@ button:disabled {
 }
 #left-stick {
   position: absolute;
-  left: 20px;
-  bottom: 26px;
-  width: 120px;
-  height: 120px;
+  left: 14px;
+  bottom: 80px;
+  width: 130px;
+  height: 130px;
   border-radius: 50%;
-  border: 2px solid rgba(148,163,184,0.5);
-  background: rgba(15,23,42,0.35);
+  border: 3px solid rgba(148,163,184,0.6);
+  background: rgba(15,23,42,0.45);
   pointer-events: auto;
+  box-shadow: 0 0 20px rgba(56,189,248,0.2), inset 0 0 20px rgba(0,0,0,0.3);
 }
 #left-stick-knob {
   position: absolute;
-  left: 40px;
-  top: 40px;
-  width: 36px;
-  height: 36px;
+  left: 44px;
+  top: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: rgba(226,232,240,0.85);
+  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(200,220,240,0.7));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 #mobile-actions {
   position: absolute;
-  right: 14px;
-  bottom: 18px;
+  right: 10px;
+  bottom: 80px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(56px, auto));
-  gap: 8px;
+  grid-template-columns: repeat(3, 60px);
+  gap: 6px;
   pointer-events: auto;
 }
 #mobile-actions button {
-  width: 64px;
-  height: 52px;
-  font-size: 14px;
+  width: 60px;
+  height: 56px;
+  font-size: 18px;
   padding: 0;
+  border-radius: 12px;
+  border-width: 2px;
+  background: linear-gradient(135deg, rgba(15,23,42,0.85) 0%, rgba(30,41,59,0.85) 100%);
+  border-color: rgba(148,163,184,0.5);
+  color: #e2e8f0;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+#mobile-fire-btn {
+  background: linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(185,28,28,0.85) 100%) !important;
+  border-color: rgba(239,68,68,0.7) !important;
+  font-size: 22px !important;
+}
+#mobile-shop-btn {
+  background: linear-gradient(135deg, rgba(124,45,18,0.85) 0%, rgba(194,65,12,0.85) 100%) !important;
+  border-color: rgba(249,115,22,0.7) !important;
+}
+#mobile-dash-btn {
+  background: linear-gradient(135deg, rgba(12,74,110,0.85) 0%, rgba(3,105,161,0.85) 100%) !important;
+  border-color: rgba(56,189,248,0.7) !important;
 }
 
 /* ── Responsive ──────────────────────────────────────── */
@@ -1012,12 +1072,23 @@ button:disabled {
   .screen-box { padding: 28px 24px; }
   .screen-box h1 { font-size: 28px; letter-spacing: 3px; }
   #minimap { display: none; }
-  #health-bar-bg { width: 140px; }
-  #weapon-selector { display: flex; bottom: 118px; }
+  #health-bar-bg { width: 130px; }
+  /* Move weapon/ammo/armor above joystick on mobile */
+  #weapon-display { bottom: 228px; right: auto; left: 160px; min-width: 120px; font-size: 14px; padding: 5px 10px; }
+  #ammo-display   { bottom: 196px; right: auto; left: 160px; min-width: 100px; font-size: 12px; padding: 4px 8px; }
+  #armor-display  { bottom: 165px; right: auto; left: 160px; min-width: 100px; font-size: 12px; padding: 4px 8px; }
+  #weapon-selector { display: flex; bottom: 225px; left: 50%; transform: translateX(-50%); }
   #mobile-controls { display: block !important; }
-  #skills-btn { top: 92px; right: 12px; }
-  #leaderboard-mini { top: 128px; left: 10px; min-width: 150px; }
-  #ammo-display, #armor-display { left: 16px; }
+  #skills-btn { top: 92px; right: 10px; font-size: 12px; padding: 6px 10px; }
+  #hud-shop-btn { display: none; }
+  #leaderboard-mini { display: none; }
+  #stats { top: 140px; right: 10px; }
+  #stats span { font-size: 11px; padding: 4px 8px; }
+  #kill-feed { top: 290px; right: 10px; max-width: 180px; }
+  #kill-feed .kill-entry { font-size: 10px; }
+  #health-bar-container { bottom: 22px; left: 50%; transform: translateX(-50%); }
+  #health-bar-bg { width: 180px; }
+  #power-ups-display { bottom: 240px; }
 }
 
 #start-screen:not([style*="display: none"]) ~ #mobile-controls,
