@@ -1022,7 +1022,9 @@ button:disabled {
 
 #start-screen:not([style*="display: none"]) ~ #mobile-controls,
 #death-screen:not([style*="display: none"]) ~ #mobile-controls,
-#skills-panel:not([style*="display: none"]) ~ #mobile-controls {
+#skills-panel:not([style*="display: none"]) ~ #mobile-controls,
+#shop-panel:not([style*="display: none"]) ~ #mobile-controls,
+#pause-panel:not([style*="display: none"]) ~ #mobile-controls {
   display: none !important;
 }
 

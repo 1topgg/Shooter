@@ -94,13 +94,14 @@ const POWERUP_LABELS = {
 };
 const WEAPON_NAMES     = { pistol: 'Pistol', shotgun: 'Shotgun', smg: 'SMG', sniper: 'Sniper' };
 const WEAPON_COLORS    = { pistol: '#94a3b8', shotgun: '#f97316', smg: '#22d3ee', sniper: '#a78bfa' };
-const WEAPON_AMMO_INF  = { pistol: true, shotgun: true, smg: true, sniper: true };
+const WEAPON_AMMO_INF  = { pistol: false, shotgun: false, smg: false, sniper: false };
 const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
 const WEAPON_ORDER = ['pistol', 'shotgun', 'smg', 'sniper'];
 const SHOP_CATALOG = [
   { id: 'unlock_shotgun', category: 'weapons', name: 'Shotgun', cost: 150, desc: 'Unlock shotgun.' },
   { id: 'unlock_smg', category: 'weapons', name: 'SMG', cost: 250, desc: 'Unlock SMG.' },
   { id: 'unlock_sniper', category: 'weapons', name: 'Sniper', cost: 400, desc: 'Unlock sniper rifle.' },
+  { id: 'ammo_pistol', category: 'ammo', name: 'Pistol ammo', cost: 70, desc: '+45 rounds.' },
   { id: 'ammo_shotgun', category: 'ammo', name: 'Shotgun ammo', cost: 120, desc: '+24 shells.' },
   { id: 'ammo_smg', category: 'ammo', name: 'SMG ammo', cost: 120, desc: '+60 bullets.' },
   { id: 'ammo_sniper', category: 'ammo', name: 'Sniper ammo', cost: 150, desc: '+8 rounds.' },
@@ -195,10 +196,10 @@ let isPaused = false, isSpectating = false, isShopOpen = false, isScoreboardOpen
 let currentWeapon = 'pistol';
 let previousWeapon = null;
 let playerWeapons = {
-  pistol:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 25, magazineSize: 25, reloadMs: 800, unlocked: true },
-  shotgun: { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 8, magazineSize: 8, reloadMs: 1200, unlocked: false },
-  smg:     { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 30, magazineSize: 30, reloadMs: 1000, unlocked: false },
-  sniper:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 5, magazineSize: 5, reloadMs: 1800, unlocked: false },
+  pistol:  { ammo: 90, maxAmmo: 120, ammoInClip: 15, magazineSize: 15, reloadMs: 800, unlocked: true },
+  shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
+  smg:     { ammo: 0, maxAmmo: 180, ammoInClip: 0, magazineSize: 30, reloadMs: 1000, unlocked: false },
+  sniper:  { ammo: 0, maxAmmo: 25, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },
 };
 let activePowerUps = [], waveNumber = 0, waveStateStr = 'prep', waveCountdown = 5, waveEnemiesLeft = 0;
 let currentMode = 'survival';
@@ -436,10 +437,17 @@ function startGame() {
 }
 
 function onDeath(killerName) {
-  isDead = true; deathScreen.style.display = 'flex';
+  isDead = true;
+  isPaused = false;
+  isShopOpen = false;
+  if (pausePanel) pausePanel.style.display = 'none';
+  if (shopPanel) shopPanel.style.display = 'none';
+  if (skillsPanel) skillsPanel.style.display = 'none';
+  deathScreen.style.display = 'flex';
   deathInfo.textContent = killerName ? 'Killed by: ' + killerName : 'You died';
   if (localPlayer) spawnParticles(localPlayer.x, localPlayer.y, '#f97316', 30, 300);
   screenShake = 10;
+  clearAllKeys();
 }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
@@ -473,7 +481,7 @@ window.addEventListener('keydown', e => {
     else togglePause();
   }
   if (e.code === 'Tab') { e.preventDefault(); isScoreboardOpen = true; renderScoreboard(); }
-  if (e.code === 'KeyB') toggleShop();
+  if (e.code === 'KeyB' && !isDead) toggleShop();
   if (localPlayer && !isDead && !isPaused) {
     if (e.code === 'Digit1') switchWeapon('pistol');
     if (e.code === 'Digit2') switchWeapon('shotgun');
@@ -582,6 +590,7 @@ function togglePause(force) {
 }
 
 function toggleShop(force) {
+  if (isDead) return;
   const open = typeof force === 'boolean' ? force : !isShopOpen;
   isShopOpen = open;
   if (shopPanel) shopPanel.style.display = open ? 'flex' : 'none';
