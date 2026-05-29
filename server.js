@@ -34,17 +34,18 @@ const ENEMY_SPAWN_EDGE_MARGIN = 40; // px from world edge for enemy spawn positi
 const WAVE_DIFFICULTY_SCALE = 0.08; // +8% enemy HP and damage per wave
 const DEFAULT_BOT_COUNT = 6;
 
-// Weapon definitions (server-authoritative) - All weapons now have infinite ammo with reload
+// Weapon definitions (server-authoritative)
 const WEAPONS = {
-  pistol:  { damage: 20, bulletCount: 1, spread: 0,    baseCooldown: 150,  infiniteAmmo: true,  maxAmmo: Infinity, magazineSize: 25, reloadMs: 800 },
-  shotgun: { damage: 14, bulletCount: 6, spread: 0.35, baseCooldown: 900,  infiniteAmmo: true,  maxAmmo: Infinity, magazineSize: 8, reloadMs: 1200 },
-  smg:     { damage: 8,  bulletCount: 1, spread: 0.08, baseCooldown: 80,   infiniteAmmo: true,  maxAmmo: Infinity, magazineSize: 30, reloadMs: 1000 },
-  sniper:  { damage: 90, bulletCount: 1, spread: 0,    baseCooldown: 1500, infiniteAmmo: true,  maxAmmo: Infinity, magazineSize: 5, reloadMs: 1800 },
+  pistol:  { damage: 20, bulletCount: 1, spread: 0,    baseCooldown: 150,  infiniteAmmo: false, maxAmmo: 120, magazineSize: 15, reloadMs: 800 },
+  shotgun: { damage: 14, bulletCount: 6, spread: 0.35, baseCooldown: 900,  infiniteAmmo: false, maxAmmo: 48,  magazineSize: 8,  reloadMs: 1200 },
+  smg:     { damage: 8,  bulletCount: 1, spread: 0.08, baseCooldown: 80,   infiniteAmmo: false, maxAmmo: 180, magazineSize: 30, reloadMs: 1000 },
+  sniper:  { damage: 90, bulletCount: 1, spread: 0,    baseCooldown: 1500, infiniteAmmo: false, maxAmmo: 25,  magazineSize: 5,  reloadMs: 1800 },
 };
 const SHOP_ITEMS = {
   unlock_shotgun: { cost: 150, type: 'unlockWeapon', weapon: 'shotgun' },
   unlock_smg: { cost: 250, type: 'unlockWeapon', weapon: 'smg' },
   unlock_sniper: { cost: 400, type: 'unlockWeapon', weapon: 'sniper' },
+  ammo_pistol: { cost: 70, type: 'ammo', weapon: 'pistol', amount: 45 },
   ammo_shotgun: { cost: 120, type: 'ammo', weapon: 'shotgun', amount: 24 },
   ammo_smg: { cost: 120, type: 'ammo', weapon: 'smg', amount: 60 },
   ammo_sniper: { cost: 150, type: 'ammo', weapon: 'sniper', amount: 8 },
@@ -892,10 +893,10 @@ wss.on('connection', (ws) => {
             team: matchConfig.mode === 'tdm' ? (players.size % 2 === 0 ? 'alpha' : 'bravo') : 'solo',
             currentWeapon: 'pistol',
             weapons: {
-              pistol:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 25, magazineSize: 25, reloadMs: 800, unlocked: true },
-              shotgun: { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 8, magazineSize: 8, reloadMs: 1200, unlocked: false },
-              smg:     { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 30, magazineSize: 30, reloadMs: 1000, unlocked: false },
-              sniper:  { ammo: Infinity, maxAmmo: Infinity, ammoInClip: 5, magazineSize: 5, reloadMs: 1800, unlocked: false },
+              pistol:  { ammo: 90, maxAmmo: 120, ammoInClip: 15, magazineSize: 15, reloadMs: 800, unlocked: true },
+              shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
+              smg:     { ammo: 0, maxAmmo: 180, ammoInClip: 0, magazineSize: 30, reloadMs: 1000, unlocked: false },
+              sniper:  { ammo: 0, maxAmmo: 25, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },
             },
             activePowerUps: [],
             lastShot: 0,
