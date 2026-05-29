@@ -66,6 +66,7 @@ const mobileDashBtn = document.getElementById('mobile-dash-btn');
 const mobileShopBtn = document.getElementById('mobile-shop-btn');
 const hudShopBtn = document.getElementById('hud-shop-btn');
 const comboDisplay = document.getElementById('combo-display');
+const weaponSelectorSlots = document.querySelectorAll('#weapon-selector .ws-slot');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const PLAYER_RADIUS = 18;
@@ -257,6 +258,10 @@ function connectWS() {
 }
 function updateStatus(cls, text) { statusText.className = 'status ' + cls; statusText.textContent = text; }
 function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+function setLevelUpPause(active) {
+  if (!joined) return;
+  send({ type: 'levelPause', active: !!active });
+}
 
 // ─── Message Handling ────────────────────────────────────────────────────────
 function handleMessage(msg) {
@@ -452,11 +457,14 @@ function startGame() {
 }
 
 function onDeath(killerName) {
+  if (isLevelUpOpen) setLevelUpPause(false);
   isDead = true;
   isPaused = false;
   isShopOpen = false;
+  isLevelUpOpen = false;
   if (pausePanel) pausePanel.style.display = 'none';
   if (shopPanel) shopPanel.style.display = 'none';
+  if (levelupPopup) levelupPopup.style.display = 'none';
   if (skillsPanel) skillsPanel.style.display = 'none';
   deathScreen.style.display = 'flex';
   deathInfo.textContent = killerName ? 'Killed by: ' + killerName : 'You died';
@@ -544,6 +552,7 @@ if (spectateBtn) spectateBtn.addEventListener('click', () => { isSpectating = tr
 if (deathMainBtn) deathMainBtn.addEventListener('click', returnToMainMenu);
 if (mobileFireBtn) {
   mobileFireBtn.addEventListener('touchstart', e => { e.preventDefault(); mouse.down = true; }, { passive: false });
+  mobileFireBtn.addEventListener('touchcancel', e => { e.preventDefault(); mouse.down = false; }, { passive: false });
   mobileFireBtn.addEventListener('touchend', e => { e.preventDefault(); mouse.down = false; }, { passive: false });
 }
 if (mobileReloadBtn) mobileReloadBtn.addEventListener('touchstart', e => { e.preventDefault(); requestReload(); }, { passive: false });
@@ -632,13 +641,16 @@ function syncMatchSettingsFromUI() {
 }
 
 function returnToMainMenu() {
+  if (isLevelUpOpen) setLevelUpPause(false);
   running = false;
   joined = false;
   isDead = false;
   isPaused = false;
   isShopOpen = false;
+  isLevelUpOpen = false;
   if (pausePanel) pausePanel.style.display = 'none';
   if (shopPanel) shopPanel.style.display = 'none';
+  if (levelupPopup) levelupPopup.style.display = 'none';
   if (hud) hud.style.display = 'none';
   if (deathScreen) deathScreen.style.display = 'none';
   if (startScreen) startScreen.style.display = 'flex';
@@ -852,6 +864,9 @@ function updateHUD() {
     weaponDisplay.style.color = WEAPON_COLORS[currentWeapon] || '#fff';
     if (ammoDisplay) ammoDisplay.textContent = WEAPON_AMMO_INF[currentWeapon] ? 'Ammo: ∞' : 'Ammo: ' + Math.max(0, wpn.ammoInClip || 0) + ' / ' + Math.max(0, wpn.ammo || 0);
   }
+  if (weaponSelectorSlots && weaponSelectorSlots.length > 0) {
+    for (const slot of weaponSelectorSlots) slot.classList.toggle('active', (slot.dataset.key === WEAPON_TO_KEY[currentWeapon]));
+  }
   if (armorDisplay) armorDisplay.textContent = 'Armor: ' + Math.max(0, Math.round(localPlayer.armor || 0));
   if (reloadIndicator && reloadBarFill && reloadText) {
     if (reloadEndAt > Date.now()) {
@@ -910,6 +925,7 @@ function showLevelUp(lvl) {
   if (!levelupPopup) return;
   isLevelUpOpen = true;
   clearAllKeys();
+  setLevelUpPause(true);
   pendingSkillPoints++;
   const title = levelupPopup.querySelector('.levelup-title');
   if (title) title.textContent = 'LEVEL UP! Lv.' + lvl;
@@ -927,7 +943,11 @@ function renderSkillOptions() {
     p.style.cssText = 'color:#94a3b8;text-align:center;padding:12px';
     p.textContent = 'All skills maxed!';
     container.appendChild(p);
-    setTimeout(() => { isLevelUpOpen = false; if (levelupPopup) levelupPopup.style.display = 'none'; }, 2000);
+    setTimeout(() => {
+      isLevelUpOpen = false;
+      setLevelUpPause(false);
+      if (levelupPopup) levelupPopup.style.display = 'none';
+    }, 2000);
     return;
   }
   for (const [k, d] of opts) {
@@ -946,6 +966,7 @@ function pickSkill(key) {
   pendingSkillPoints = Math.max(0, pendingSkillPoints - 1);
   persistProgress();
   isLevelUpOpen = false;
+  setLevelUpPause(false);
   if (levelupPopup) levelupPopup.style.display = 'none';
   showNotification(SKILL_DEFS[key].name + ' upgraded!');
 }
@@ -1187,7 +1208,18 @@ function drawDrops() {
 }
 function drawEnemyBullets() {
   for (const b of enemyBullets) { 
-    // Enhanced bullet with trail
+    const trailLen = 16;
+    const tx = b.x - Math.cos(b.angle) * trailLen;
+    const ty = b.y - Math.sin(b.angle) * trailLen;
+    const trailGrad = ctx.createLinearGradient(b.x, b.y, tx, ty);
+    trailGrad.addColorStop(0, 'rgba(248,113,113,0.9)');
+    trailGrad.addColorStop(1, 'rgba(248,113,113,0)');
+    ctx.strokeStyle = trailGrad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
     ctx.shadowColor = '#f87171'; 
     ctx.shadowBlur = 15; 
     ctx.beginPath(); 
@@ -1375,7 +1407,26 @@ function lightenColor(color, percent) {
   return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
 }
 function drawBullets() {
-  for (const b of bullets) { ctx.shadowColor = '#fde047'; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(b.x, b.y, BULLET_RADIUS, 0, Math.PI*2); ctx.fillStyle = '#fde047'; ctx.fill(); }
+  for (const b of bullets) {
+    const trailLen = 20;
+    const tx = b.x - Math.cos(b.angle) * trailLen;
+    const ty = b.y - Math.sin(b.angle) * trailLen;
+    const trailGrad = ctx.createLinearGradient(b.x, b.y, tx, ty);
+    trailGrad.addColorStop(0, 'rgba(253,224,71,0.95)');
+    trailGrad.addColorStop(1, 'rgba(253,224,71,0)');
+    ctx.strokeStyle = trailGrad;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.shadowColor = '#fde047';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, BULLET_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = '#fde047';
+    ctx.fill();
+  }
   ctx.shadowBlur = 0;
 }
 function drawParticles() {
