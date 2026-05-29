@@ -518,8 +518,14 @@ function startWave(wave) {
 setInterval(() => {
   const now = Date.now();
   const active = getActivePlayers();
-  const alivePlayers = [...players.values()].filter(p => !p.dead);
-  const allAlivePaused = alivePlayers.length > 0 && alivePlayers.every(p => p.levelUpPaused);
+  let aliveCount = 0;
+  let alivePausedCount = 0;
+  for (const p of players.values()) {
+    if (p.dead) continue;
+    aliveCount++;
+    if (p.levelUpPaused) alivePausedCount++;
+  }
+  const allAlivePaused = aliveCount > 0 && alivePausedCount === aliveCount;
 
   // ── Wave management ─────────────────────────────────────────────────────────
   if (active.length > 0 && matchConfig.mode === 'survival') {

@@ -864,9 +864,7 @@ function updateHUD() {
     weaponDisplay.style.color = WEAPON_COLORS[currentWeapon] || '#fff';
     if (ammoDisplay) ammoDisplay.textContent = WEAPON_AMMO_INF[currentWeapon] ? 'Ammo: ∞' : 'Ammo: ' + Math.max(0, wpn.ammoInClip || 0) + ' / ' + Math.max(0, wpn.ammo || 0);
   }
-  if (weaponSelectorSlots && weaponSelectorSlots.length > 0) {
-    for (const slot of weaponSelectorSlots) slot.classList.toggle('active', (slot.dataset.key === WEAPON_TO_KEY[currentWeapon]));
-  }
+  for (const slot of weaponSelectorSlots) slot.classList.toggle('active', (slot.dataset.key === WEAPON_TO_KEY[currentWeapon]));
   if (armorDisplay) armorDisplay.textContent = 'Armor: ' + Math.max(0, Math.round(localPlayer.armor || 0));
   if (reloadIndicator && reloadBarFill && reloadText) {
     if (reloadEndAt > Date.now()) {
