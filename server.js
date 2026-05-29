@@ -193,7 +193,7 @@ function sendToPlayer(playerId, message) {
 function getClosestPlayer(x, y) {
   let closest = null, minDist = Infinity;
   for (const [, p] of players) {
-    if (p.dead) continue;
+    if (p.dead || p.levelUpPaused) continue;
     const d = (p.x - x) ** 2 + (p.y - y) ** 2;
     if (d < minDist) { minDist = d; closest = p; }
   }
@@ -202,7 +202,7 @@ function getClosestPlayer(x, y) {
 
 function getActivePlayers() {
   const list = [];
-  for (const [, p] of players) if (!p.dead) list.push(p);
+  for (const [, p] of players) if (!p.dead && !p.levelUpPaused) list.push(p);
   return list;
 }
 
@@ -270,6 +270,7 @@ function getPlayerMaxHealth(player) {
 }
 
 function applyDamageToPlayer(player, playerId, damage, killerId, now) {
+  if (player.levelUpPaused) return;
   // Check invincibility
   const checkTime = Date.now();
   if (player.activePowerUps) {
@@ -517,6 +518,14 @@ function startWave(wave) {
 setInterval(() => {
   const now = Date.now();
   const active = getActivePlayers();
+  let aliveCount = 0;
+  let alivePausedCount = 0;
+  for (const p of players.values()) {
+    if (p.dead) continue;
+    aliveCount++;
+    if (p.levelUpPaused) alivePausedCount++;
+  }
+  const allAlivePaused = aliveCount > 0 && alivePausedCount === aliveCount;
 
   // ── Wave management ─────────────────────────────────────────────────────────
   if (active.length > 0 && matchConfig.mode === 'survival') {
@@ -569,6 +578,8 @@ setInterval(() => {
     enemies.clear();
   }
 
+  if (allAlivePaused) return;
+
   // ── Player bullets ──────────────────────────────────────────────────────────
   for (const [id, bullet] of bullets) {
     bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
@@ -585,7 +596,7 @@ setInterval(() => {
     let hit = false;
     const shooter = players.get(bullet.ownerId);
     for (const [pid, player] of players) {
-      if (pid === bullet.ownerId || player.dead) continue;
+      if (pid === bullet.ownerId || player.dead || player.levelUpPaused) continue;
       if (shooter && matchConfig.mode === 'tdm' && !matchConfig.friendlyFire && sameTeam(shooter, player)) continue;
       const dx = player.x - bullet.x, dy = player.y - bullet.y;
       if (dx * dx + dy * dy < (PLAYER_RADIUS + 5) ** 2) {
@@ -631,7 +642,7 @@ setInterval(() => {
     }
 
     for (const [pid, player] of players) {
-      if (player.dead) continue;
+      if (player.dead || player.levelUpPaused) continue;
       const dx = player.x - bullet.x, dy = player.y - bullet.y;
       if (dx * dx + dy * dy < (PLAYER_RADIUS + 4) ** 2) {
         applyDamageToPlayer(player, pid, bullet.damage, null, now);
@@ -732,7 +743,7 @@ setInterval(() => {
       continue;
     }
     for (const [pid, player] of players) {
-      if (player.dead) continue;
+      if (player.dead || player.levelUpPaused) continue;
       const dx = player.x - drop.x, dy = player.y - drop.y;
       if (dx * dx + dy * dy < 28 * 28) {
         pickupDrop(player, pid, drop);
@@ -922,6 +933,7 @@ wss.on('connection', (ws) => {
             reloading: false,
             reloadEndAt: 0,
             reloadWeapon: null,
+            levelUpPaused: false,
           };
           if (player.team === 'alpha') player.color = '#3b82f6';
           if (player.team === 'bravo') player.color = '#ef4444';
@@ -971,7 +983,7 @@ wss.on('connection', (ws) => {
         case 'move': {
           if (!connData.joined) return;
           const player = players.get(connData.playerId);
-          if (!player || player.dead) return;
+          if (!player || player.dead || player.levelUpPaused) return;
 
           if (typeof msg.x === 'number' && typeof msg.y === 'number' &&
               isFinite(msg.x) && isFinite(msg.y)) {
@@ -986,7 +998,7 @@ wss.on('connection', (ws) => {
         case 'shoot': {
           if (!connData.joined) return;
           const player = players.get(connData.playerId);
-          if (!player || player.dead) return;
+          if (!player || player.dead || player.levelUpPaused) return;
 
           if (typeof msg.angle === 'number' && isFinite(msg.angle)) player.angle = msg.angle;
 
@@ -1034,7 +1046,7 @@ wss.on('connection', (ws) => {
         case 'switchWeapon': {
           if (!connData.joined) return;
           const player = players.get(connData.playerId);
-          if (!player || player.dead) return;
+          if (!player || player.dead || player.levelUpPaused) return;
           const wn = msg.weapon;
           if (WEAPONS[wn] && player.weapons[wn]) {
             const wpn = player.weapons[wn];
@@ -1078,8 +1090,16 @@ wss.on('connection', (ws) => {
         case 'reload': {
           if (!connData.joined) return;
           const player = players.get(connData.playerId);
-          if (!player || player.dead) return;
+          if (!player || player.dead || player.levelUpPaused) return;
           startReload(player, connData.playerId, Date.now());
+          break;
+        }
+
+        case 'levelPause': {
+          if (!connData.joined) return;
+          const player = players.get(connData.playerId);
+          if (!player || player.dead) return;
+          player.levelUpPaused = !!msg.active;
           break;
         }
 
