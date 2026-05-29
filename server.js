@@ -24,7 +24,7 @@ const MAX_HEALTH = 100;
 const RESPAWN_DELAY = 3000;
 const WAVE_PREP_TIME = 10000;
 const WAVE_TRANSITION_DELAY = 200; // Allow clients to process wave-complete before prep starts
-const WAVE_BONUS_COINS = 30;
+const WAVE_BONUS_COINS = 50;
 const ENEMY_BULLET_SPEED = 9;
 const ENEMY_BULLET_LIFETIME = 2500;
 const DROP_LIFETIME = 30000; // ms before ground drop expires
@@ -36,7 +36,7 @@ const DEFAULT_BOT_COUNT = 6;
 
 // Weapon definitions (server-authoritative)
 const WEAPONS = {
-  pistol:  { damage: 20, bulletCount: 1, spread: 0,    baseCooldown: 150,  infiniteAmmo: false, maxAmmo: 120, magazineSize: 15, reloadMs: 800 },
+  pistol:  { damage: 20, bulletCount: 1, spread: 0,    baseCooldown: 150,  infiniteAmmo: false, maxAmmo: 150, magazineSize: 20, reloadMs: 800 },
   shotgun: { damage: 14, bulletCount: 6, spread: 0.35, baseCooldown: 900,  infiniteAmmo: false, maxAmmo: 48,  magazineSize: 8,  reloadMs: 1200 },
   smg:     { damage: 8,  bulletCount: 1, spread: 0.08, baseCooldown: 80,   infiniteAmmo: false, maxAmmo: 180, magazineSize: 30, reloadMs: 1000 },
   sniper:  { damage: 90, bulletCount: 1, spread: 0,    baseCooldown: 1500, infiniteAmmo: false, maxAmmo: 25,  magazineSize: 5,  reloadMs: 1800 },
@@ -45,7 +45,7 @@ const SHOP_ITEMS = {
   unlock_shotgun: { cost: 150, type: 'unlockWeapon', weapon: 'shotgun' },
   unlock_smg: { cost: 250, type: 'unlockWeapon', weapon: 'smg' },
   unlock_sniper: { cost: 400, type: 'unlockWeapon', weapon: 'sniper' },
-  ammo_pistol: { cost: 70, type: 'ammo', weapon: 'pistol', amount: 45 },
+  ammo_pistol: { cost: 50, type: 'ammo', weapon: 'pistol', amount: 45 },
   ammo_shotgun: { cost: 120, type: 'ammo', weapon: 'shotgun', amount: 24 },
   ammo_smg: { cost: 120, type: 'ammo', weapon: 'smg', amount: 60 },
   ammo_sniper: { cost: 150, type: 'ammo', weapon: 'sniper', amount: 8 },
@@ -79,9 +79,10 @@ const DROP_CHANCES = {
   zombie:  [
     { type: 'hp',    chance: 0.25, amount: 20 },
     { type: 'coins', chance: 0.90, amount: 5  },
+    { type: 'ammo',  chance: 0.30, amount: 15 },
   ],
   runner:  [
-    { type: 'ammo',  chance: 0.40, amount: 15 },
+    { type: 'ammo',  chance: 0.55, amount: 20 },
     { type: 'coins', chance: 0.80, amount: 8  },
   ],
   tank:    [
@@ -527,11 +528,21 @@ setInterval(() => {
 
       const bonusCoins = WAVE_BONUS_COINS + waveState.wave * 5;
       const bonusXP = 25 + waveState.wave * 5;
-      for (const [, p] of players) {
+      for (const [pid, p] of players) {
         if (!p.dead) {
           p.coins = (p.coins || 0) + bonusCoins;
           p.xp    = (p.xp    || 0) + bonusXP;
           updatePlayerLevel(p);
+          // Emergency ammo: ensure player always has enough to continue
+          const pistol = p.weapons && p.weapons.pistol;
+          if (pistol) {
+            const totalPistolAmmo = (pistol.ammo || 0) + (pistol.ammoInClip || 0);
+            if (totalPistolAmmo < 20) {
+              const toAdd = 40 - totalPistolAmmo;
+              pistol.ammo = Math.min(pistol.maxAmmo || 150, (pistol.ammo || 0) + toAdd);
+              sendToPlayer(pid, { type: 'pickup', dropType: 'ammo', amount: toAdd, weapons: p.weapons });
+            }
+          }
         }
       }
 
@@ -893,7 +904,7 @@ wss.on('connection', (ws) => {
             team: matchConfig.mode === 'tdm' ? (players.size % 2 === 0 ? 'alpha' : 'bravo') : 'solo',
             currentWeapon: 'pistol',
             weapons: {
-              pistol:  { ammo: 90, maxAmmo: 120, ammoInClip: 15, magazineSize: 15, reloadMs: 800, unlocked: true },
+              pistol:  { ammo: 120, maxAmmo: 150, ammoInClip: 20, magazineSize: 20, reloadMs: 800, unlocked: true },
               shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
               smg:     { ammo: 0, maxAmmo: 180, ammoInClip: 0, magazineSize: 30, reloadMs: 1000, unlocked: false },
               sniper:  { ammo: 0, maxAmmo: 25, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },

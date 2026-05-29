@@ -35,6 +35,8 @@
     <div id="powerups-display"></div>
     <!-- Skills button -->
     <button id="skills-btn">Skills [K]</button>
+    <!-- Shop button (always visible during game) -->
+    <button id="hud-shop-btn">🛒 Shop [B]</button>
     <!-- Health bar -->
     <div id="health-bar-container">
       <span id="health-label">HP</span>
@@ -48,6 +50,8 @@
       <span id="killstreak-display">Streak: 0</span>
     </div>
     <div id="leaderboard-mini"></div>
+    <!-- Combo display -->
+    <div id="combo-display" style="display:none;"></div>
     <div id="kill-feed"></div>
     <div id="minimap"><canvas id="minimap-canvas" width="160" height="160"></canvas></div>
     <div id="player-count">Players: <span id="pcount">0</span></div>
@@ -210,10 +214,12 @@
       <div id="left-stick-knob"></div>
     </div>
     <div id="mobile-actions">
-      <button id="mobile-fire-btn" type="button">Fire</button>
-      <button id="mobile-reload-btn" type="button">R</button>
-      <button id="mobile-switch-btn" type="button">↺</button>
+      <button id="mobile-fire-btn" type="button">🔥</button>
+      <button id="mobile-reload-btn" type="button">↺ R</button>
+      <button id="mobile-switch-btn" type="button">🔄</button>
       <button id="mobile-pause-btn" type="button">☰</button>
+      <button id="mobile-shop-btn" type="button">🛒</button>
+      <button id="mobile-dash-btn" type="button">💨</button>
     </div>
   </div>
 

@@ -62,6 +62,10 @@ const mobileFireBtn = document.getElementById('mobile-fire-btn');
 const mobileReloadBtn = document.getElementById('mobile-reload-btn');
 const mobileSwitchBtn = document.getElementById('mobile-switch-btn');
 const mobilePauseBtn = document.getElementById('mobile-pause-btn');
+const mobileDashBtn = document.getElementById('mobile-dash-btn');
+const mobileShopBtn = document.getElementById('mobile-shop-btn');
+const hudShopBtn = document.getElementById('hud-shop-btn');
+const comboDisplay = document.getElementById('combo-display');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const PLAYER_RADIUS = 18;
@@ -101,7 +105,7 @@ const SHOP_CATALOG = [
   { id: 'unlock_shotgun', category: 'weapons', name: 'Shotgun', cost: 150, desc: 'Unlock shotgun.' },
   { id: 'unlock_smg', category: 'weapons', name: 'SMG', cost: 250, desc: 'Unlock SMG.' },
   { id: 'unlock_sniper', category: 'weapons', name: 'Sniper', cost: 400, desc: 'Unlock sniper rifle.' },
-  { id: 'ammo_pistol', category: 'ammo', name: 'Pistol ammo', cost: 70, desc: '+45 rounds.' },
+  { id: 'ammo_pistol', category: 'ammo', name: 'Pistol ammo', cost: 50, desc: '+45 rounds.' },
   { id: 'ammo_shotgun', category: 'ammo', name: 'Shotgun ammo', cost: 120, desc: '+24 shells.' },
   { id: 'ammo_smg', category: 'ammo', name: 'SMG ammo', cost: 120, desc: '+60 bullets.' },
   { id: 'ammo_sniper', category: 'ammo', name: 'Sniper ammo', cost: 150, desc: '+8 rounds.' },
@@ -184,7 +188,7 @@ function getShootCooldown(wpn) {
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let ws = null, connected = false, joined = false, localId = null;
+let ws = null, connected = false, joined = false, localId = null, localPlayerName = '';
 let worldW = 2400, worldH = 2400;
 const keys = {}, mouse = { x: 0, y: 0, down: false }, camera = { x: 0, y: 0 };
 let players = new Map(), bullets = [], enemyBullets = [], enemies = [], drops = [];
@@ -193,10 +197,11 @@ let localPlayer = null, pendingInputs = [], inputSeq = 0;
 let lastSendTime = 0, lastShotTime = 0, lastDashTime = 0;
 let running = false, lastFrame = 0, isDead = false;
 let isPaused = false, isSpectating = false, isShopOpen = false, isScoreboardOpen = false;
+let isLevelUpOpen = false;
 let currentWeapon = 'pistol';
 let previousWeapon = null;
 let playerWeapons = {
-  pistol:  { ammo: 90, maxAmmo: 120, ammoInClip: 15, magazineSize: 15, reloadMs: 800, unlocked: true },
+  pistol:  { ammo: 120, maxAmmo: 150, ammoInClip: 20, magazineSize: 20, reloadMs: 800, unlocked: true },
   shotgun: { ammo: 0, maxAmmo: 48, ammoInClip: 0, magazineSize: 8, reloadMs: 1200, unlocked: false },
   smg:     { ammo: 0, maxAmmo: 180, ammoInClip: 0, magazineSize: 30, reloadMs: 1000, unlocked: false },
   sniper:  { ammo: 0, maxAmmo: 25, ammoInClip: 0, magazineSize: 5, reloadMs: 1800, unlocked: false },
@@ -209,6 +214,8 @@ let reloadEndAt = 0, reloadDuration = 0;
 let reloadRequested = false;
 let reloadRequestSentAt = 0;
 let selectedShopCategory = 'weapons';
+// Combo system
+let comboCount = 0, comboTimer = 0, comboResetDelay = 4000;
 let matchSettings = {
   mode: save.mode || 'survival',
   difficulty: save.difficulty || 'normal',
@@ -301,7 +308,14 @@ function handleMessage(msg) {
       spawnDmgNum(msg.x, msg.y, msg.damage, '#fb923c'); break;
 
     case 'enemyDied':
-      spawnParticles(msg.x, msg.y, '#facc15', 22, 260); screenShake = Math.max(screenShake, 3); break;
+      spawnParticles(msg.x, msg.y, '#facc15', 22, 260); screenShake = Math.max(screenShake, 3);
+      // Combo: if this player killed the enemy
+      if (msg.killerId === localId) {
+        comboCount++;
+        comboTimer = 0;
+        if (comboCount >= 2) updateComboDisplay();
+      }
+      break;
 
     case 'waveStart':
       waveNumber = msg.wave; waveStateStr = 'active'; waveEnemiesLeft = msg.enemyCount || 0;
@@ -424,6 +438,7 @@ function applyState(msg) {
 function startGame() {
   if (!connected) return;
   const name = nameInput.value.trim() || '';
+  localPlayerName = name;
   send({
     type: 'join',
     name,
@@ -447,6 +462,7 @@ function onDeath(killerName) {
   deathInfo.textContent = killerName ? 'Killed by: ' + killerName : 'You died';
   if (localPlayer) spawnParticles(localPlayer.x, localPlayer.y, '#f97316', 30, 300);
   screenShake = 10;
+  comboCount = 0; comboTimer = 0; if (comboDisplay) comboDisplay.style.display = 'none';
   clearAllKeys();
 }
 
@@ -464,7 +480,7 @@ window.addEventListener('visibilitychange', () => {
 
 window.addEventListener('keydown', e => {
   // Prevent stuck keys from popups/modals
-  if (isDead || isPaused || isShopOpen) {
+  if (isDead || isPaused || isShopOpen || isLevelUpOpen) {
     if (!['Escape', 'KeyB', 'Tab'].includes(e.code)) {
       clearAllKeys();
       return;
@@ -533,6 +549,9 @@ if (mobileFireBtn) {
 if (mobileReloadBtn) mobileReloadBtn.addEventListener('touchstart', e => { e.preventDefault(); requestReload(); }, { passive: false });
 if (mobileSwitchBtn) mobileSwitchBtn.addEventListener('touchstart', e => { e.preventDefault(); cycleWeapon(1); }, { passive: false });
 if (mobilePauseBtn) mobilePauseBtn.addEventListener('touchstart', e => { e.preventDefault(); togglePause(); }, { passive: false });
+if (mobileDashBtn) mobileDashBtn.addEventListener('touchstart', e => { e.preventDefault(); if (localPlayer && !isDead) tryDash(); }, { passive: false });
+if (mobileShopBtn) mobileShopBtn.addEventListener('touchstart', e => { e.preventDefault(); toggleShop(); }, { passive: false });
+if (hudShopBtn) hudShopBtn.addEventListener('click', () => toggleShop());
 if (leftStick) {
   leftStick.addEventListener('touchstart', onStickStart, { passive: false });
   leftStick.addEventListener('touchmove', onStickMove, { passive: false });
@@ -716,7 +735,7 @@ function tryDash() {
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 function update(dt) {
-  if (!localPlayer || isDead || isPaused || isShopOpen || isSpectating) return;
+  if (!localPlayer || isDead || isPaused || isShopOpen || isSpectating || isLevelUpOpen) return;
   const now = performance.now();
   localPlayer.angle = Math.atan2(camera.y + mouse.y - localPlayer.y, camera.x + mouse.x - localPlayer.x);
   let mx = 0, my = 0;
@@ -771,6 +790,11 @@ function update(dt) {
     if (dn.life <= 0) damageNumbers.splice(i, 1);
   }
   activePowerUps = activePowerUps.filter(p => p.expiresAt > Date.now());
+  // Combo timer decay
+  if (comboCount > 0) {
+    comboTimer += dt * 1000;
+    if (comboTimer >= comboResetDelay) { comboCount = 0; comboTimer = 0; updateComboDisplay(); }
+  }
   updateHUD();
 }
 
@@ -884,6 +908,8 @@ function showWaveComplete(wave, bonusCoins, bonusXP) {
 function checkLevelUp() { const n = Math.floor(Math.sqrt(xp / 100)); if (n > level) level = n; }
 function showLevelUp(lvl) {
   if (!levelupPopup) return;
+  isLevelUpOpen = true;
+  clearAllKeys();
   pendingSkillPoints++;
   const title = levelupPopup.querySelector('.levelup-title');
   if (title) title.textContent = 'LEVEL UP! Lv.' + lvl;
@@ -901,7 +927,7 @@ function renderSkillOptions() {
     p.style.cssText = 'color:#94a3b8;text-align:center;padding:12px';
     p.textContent = 'All skills maxed!';
     container.appendChild(p);
-    setTimeout(() => { if (levelupPopup) levelupPopup.style.display = 'none'; }, 2000);
+    setTimeout(() => { isLevelUpOpen = false; if (levelupPopup) levelupPopup.style.display = 'none'; }, 2000);
     return;
   }
   for (const [k, d] of opts) {
@@ -919,6 +945,7 @@ function pickSkill(key) {
   skills[key] = Math.min(SKILL_DEFS[key].max, (skills[key] || 0) + 1);
   pendingSkillPoints = Math.max(0, pendingSkillPoints - 1);
   persistProgress();
+  isLevelUpOpen = false;
   if (levelupPopup) levelupPopup.style.display = 'none';
   showNotification(SKILL_DEFS[key].name + ' upgraded!');
 }
@@ -970,7 +997,33 @@ function showNotification(text) {
 function addKillFeed(killer, victim) {
   killFeed.push({ killer, victim, fadeTime: Date.now() + 6000 });
   if (killFeed.length > 5) killFeed.shift();
+  // Combo tracking: increment combo when local player gets a kill
+  if (killer === localPlayerName && victim !== localPlayerName) {
+    comboCount++;
+    comboTimer = 0;
+    if (comboCount >= 2) updateComboDisplay();
+  }
   renderKillFeed();
+}
+
+function updateComboDisplay() {
+  if (!comboDisplay) return;
+  if (comboCount < 2) {
+    comboDisplay.style.display = 'none';
+    return;
+  }
+  const colors = ['#fbbf24','#f97316','#ef4444','#c084fc','#a78bfa'];
+  const color = colors[Math.min(comboCount - 2, colors.length - 1)];
+  const labels = ['DOUBLE KILL!','TRIPLE KILL!','QUAD KILL!','PENTA KILL!','RAMPAGE!'];
+  const label = labels[Math.min(comboCount - 2, labels.length - 1)] || 'KILLING SPREE!';
+  comboDisplay.innerHTML = `<div class="combo-text" style="color:${color}">${label}</div><div class="combo-sub">x${comboCount} kills in a row!</div>`;
+  comboDisplay.style.display = 'block';
+  comboDisplay.style.animation = 'none';
+  // Restart animation
+  void comboDisplay.offsetWidth;
+  comboDisplay.style.animation = '';
+  screenShake = Math.max(screenShake, Math.min(comboCount * 2, 8));
+  setTimeout(() => { if (comboCount < 2 && comboDisplay) comboDisplay.style.display = 'none'; }, 3000);
 }
 function renderKillFeed() {
   const now = Date.now();
@@ -993,7 +1046,19 @@ function persistProgress() {
   });
 }
 
-// ─── Render ───────────────────────────────────────────────────────────────────
+// ─── Stars (background visual) ────────────────────────────────────────────────
+const STARS = (() => {
+  const arr = [];
+  for (let i = 0; i < 350; i++) {
+    arr.push({
+      x: Math.random() * 2400, y: Math.random() * 2400,
+      r: 0.5 + Math.random() * 2,
+      alpha: 0.2 + Math.random() * 0.7,
+      twinkle: Math.random() * Math.PI * 2,
+    });
+  }
+  return arr;
+})();
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const sx = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
@@ -1005,16 +1070,43 @@ function render() {
   drawMinimap();
 }
 function drawWorld() {
-  // Enhanced gradient background
-  const bgGradient = ctx.createRadialGradient(worldW / 2, worldH / 2, 0, worldW / 2, worldH / 2, worldW);
-  bgGradient.addColorStop(0, '#1a1a2e');
-  bgGradient.addColorStop(0.5, '#16213e');
-  bgGradient.addColorStop(1, '#0f1419');
+  // Rich dark gradient background
+  const bgGradient = ctx.createRadialGradient(worldW / 2, worldH / 2, 0, worldW / 2, worldH / 2, worldW * 0.85);
+  bgGradient.addColorStop(0, '#1a1a3e');
+  bgGradient.addColorStop(0.4, '#0f0f2a');
+  bgGradient.addColorStop(1, '#050510');
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, worldW, worldH);
+
+  // Nebula-like color splashes (static)
+  const nebulaColors = [
+    { x: 600, y: 500, r: 400, c: 'rgba(56,189,248,0.04)' },
+    { x: 1800, y: 900, r: 500, c: 'rgba(124,58,237,0.05)' },
+    { x: 1000, y: 1800, r: 450, c: 'rgba(239,68,68,0.04)' },
+    { x: 2100, y: 2000, r: 380, c: 'rgba(34,197,94,0.04)' },
+  ];
+  for (const n of nebulaColors) {
+    const ng = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+    ng.addColorStop(0, n.c);
+    ng.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ng;
+    ctx.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
+  }
+
+  // Twinkling stars
+  const t = Date.now() * 0.001;
+  for (const s of STARS) {
+    const alpha = s.alpha * (0.6 + 0.4 * Math.sin(t * 1.5 + s.twinkle));
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   
-  // Enhanced grid with glow
-  ctx.strokeStyle = 'rgba(56,189,248,0.08)'; 
+  // Subtle grid
+  ctx.strokeStyle = 'rgba(56,189,248,0.06)'; 
   ctx.lineWidth = 1;
   const gsx = Math.floor(camera.x / 60) * 60, gsy = Math.floor(camera.y / 60) * 60;
   const gex = camera.x + canvas.width, gey = camera.y + canvas.height;
@@ -1031,20 +1123,28 @@ function drawWorld() {
     ctx.stroke(); 
   }
   
-  // Enhanced border with glow
+  // Glowing border
   ctx.strokeStyle = '#ef4444'; 
-  ctx.lineWidth = 5; 
+  ctx.lineWidth = 6; 
   ctx.shadowColor = '#ef4444';
-  ctx.shadowBlur = 15;
-  ctx.strokeRect(2, 2, worldW - 4, worldH - 4);
+  ctx.shadowBlur = 20;
+  ctx.strokeRect(3, 3, worldW - 6, worldH - 6);
   ctx.shadowBlur = 0;
   
-  // Gradient edges
-  const grd = ctx.createLinearGradient(0, 0, 30, 0);
-  grd.addColorStop(0, 'rgba(239,68,68,0.2)'); 
-  grd.addColorStop(1, 'rgba(239,68,68,0)');
-  ctx.fillStyle = grd; 
-  ctx.fillRect(0, 0, 30, worldH);
+  // Gradient danger edges (all 4 sides)
+  const edgeFade = 40;
+  const grds = [
+    { g: ctx.createLinearGradient(0,0,edgeFade,0), r: [0,0,edgeFade,worldH] },
+    { g: ctx.createLinearGradient(worldW,0,worldW-edgeFade,0), r: [worldW-edgeFade,0,edgeFade,worldH] },
+    { g: ctx.createLinearGradient(0,0,0,edgeFade), r: [0,0,worldW,edgeFade] },
+    { g: ctx.createLinearGradient(0,worldH,0,worldH-edgeFade), r: [0,worldH-edgeFade,worldW,edgeFade] },
+  ];
+  for (const { g, r } of grds) {
+    g.addColorStop(0, 'rgba(239,68,68,0.25)'); 
+    g.addColorStop(1, 'rgba(239,68,68,0)');
+    ctx.fillStyle = g; 
+    ctx.fillRect(...r);
+  }
 }
 function drawDrops() {
   for (const d of drops) {
