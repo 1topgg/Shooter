@@ -102,6 +102,7 @@ const WEAPON_COLORS    = { pistol: '#94a3b8', shotgun: '#f97316', smg: '#22d3ee'
 const WEAPON_AMMO_INF  = { pistol: false, shotgun: false, smg: false, sniper: false };
 const WEAPON_COOLDOWNS = { pistol: 150, shotgun: 900, smg: 80, sniper: 1500 };
 const WEAPON_ORDER = ['pistol', 'shotgun', 'smg', 'sniper'];
+const WEAPON_TO_KEY = { pistol: '1', shotgun: '2', smg: '3', sniper: '4' };
 const SHOP_CATALOG = [
   { id: 'unlock_shotgun', category: 'weapons', name: 'Shotgun', cost: 150, desc: 'Unlock shotgun.' },
   { id: 'unlock_smg', category: 'weapons', name: 'SMG', cost: 250, desc: 'Unlock SMG.' },
